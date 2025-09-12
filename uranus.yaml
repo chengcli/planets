@@ -1,0 +1,134 @@
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+  - name: CH4
+    composition: {C: 1, H: 4}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: H2S
+    composition: {H: 2, S: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: CH4s
+    composition: {C: 1, H: 4}
+    cv_R: 9.0
+    u0_R: -5520.
+
+  - name: CH4sp
+    composition: {C: 1, H: 4}
+    cv_R: 9.0
+    u0_R: -5520.
+
+  - name: H2Ss
+    composition: {H: 2, S: 1}
+    cv_R: 5.5
+    u0_R: -1284.6
+
+  - name: H2Ssp
+    composition: {H: 2, S: 1}
+    cv_R: 5.5
+    u0_R: -1284.6
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 350.e3, x2min: 0., x2max: 1440.e3, x3min: 0., x3max: 1440.e3}
+  cells: {nx1: 100, nx2: 100, nx3: 100, nghost: 3}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor:  1.e-10
+    pressure-floor: 1.e-10
+    tracer-floor: 1.e-12
+    limiter: true
+    max-iter: 10
+    ftol: 1.e-6
+
+  vertical-projection:
+    type: temperature
+    pressure-margin: 1.e-6
+
+  reconstruct:
+    vertical: {type: weno5, scale: true, shock: true}
+    horizontal: {type: weno5, scale: true, shock: true}
+
+  riemann-solver:
+    type: hllc
+
+boundary-condition:
+  internal:
+    solid-density: 1.e3
+    solid-pressure: 1.9
+    max-iter: 5
+
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
+
+integration:
+  type: rk3
+  cfl: 0.45
+  implicit-scheme: 9
+  nlim: -1
+  tlim: 1.e5
+
+forcing:
+  const-gravity:
+    grav1: -9.01
+
+sedimentation:
+  radius:
+    CH4sp: 1.0e-10
+    H2Ssp: 1.0e-10
+
+  density:
+    CH4sp: 1000.
+    H2Ssp: 1000.
+
+  const-vsed:
+    CH4sp: -200.0
+    H2Ssp: -200.0
+
+reactions:
+  - equation: CH4 => CH4s
+    type: nucleation
+    rate-constant: {formula: ch4_ideal}
+
+  - equation: CH4s => CH4sp
+    type: coagulation
+    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
+
+  - equation: CH4sp => CH4
+    type: evaporation
+    rate-constant: {formula: ch4_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+
+  - equation: H2S => H2Ss
+    type: nucleation
+    rate-constant: {formula: h2s_ideal}
+
+  - equation: H2Ss => H2Ssp
+    type: coagulation
+    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
+
+  - equation: H2Ssp => H2S
+    type: evaporation
+    rate-constant: {formula: h2s_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+
+problem:
+  Ps: 50.e5
+  Ts: 250.
+  Tmin: 52.
+  xH2S: 8.e-4
+  xCH4: 1.e-2
