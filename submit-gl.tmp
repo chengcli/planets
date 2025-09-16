@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#SBATCH --time=2:00:00
+#SBATCH --job-name=<name>
+#SBATCH --account=chengcli0
+#SBATCH -n <nodes>
+#SBATCH -o %x.out.%j  # STDOUT
+#SBATCH -e %x.err.%j  # STDERR
+
+# load modules
+module restore
+source /home/chengcli/myenv/bin/activate
+
+# change the working directory
+echo Working directory is $SLURM_SUBMIT_DIR
+
+# write job information
+echo Running on hosts $SLURM_NODELIST
+echo Running on hosts $SLURM_JOB_NODELIST
+echo Running job $SLURM_JOB_NAME
+echo Running on $SLURM_NNODES nodes
+echo Running on $SLURM_NPROCS processors
+echo Time submitted: `date`
+
+NODES=$SLURM_NNODES
+NP=$SLURM_NPROCS
+PPN=$SLURM_NTASKS_PER_NODE
+
+# MPI info
+echo MPI Used: `which mpirun`
+echo This job has allocated $SLURM_NPROCS cpus on $SLURM_JOB_NUMNODES nodes
+
+
