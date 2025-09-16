@@ -1,0 +1,180 @@
+=============================
+Great Lakes HPC Quickstart
+=============================
+
+This page summarizes how to get access to the University of Michigan
+**Great Lakes** cluster, how to log in, and how to submit jobs with Slurm.
+
+.. contents::
+   :local:
+   :depth: 2
+
+
+Overview
+========
+
+Great Lakes is U-M’s campus-wide HPC cluster for simulation, ML, data science,
+and more. It uses **Slurm** for scheduling and supports both interactive
+(Open OnDemand) and batch workflows. :contentReference[oaicite:0]{index=0}
+
+
+1) Requesting Access
+====================
+
+There are two parts to access:
+
+- **Cluster login (user account).** Request a login via the **ITS-ARC Login** form
+  and complete Duo setup. :contentReference[oaicite:1]{index=1}
+- **Slurm account (for charging/allocations).**
+  Many researchers are eligible for the **U-M Research Computing Package (UMRCP)**,
+  which provides a no-cost allocation (currently 80,000 CPU hours) usable on
+  Great Lakes (and/or Armis). Otherwise, your PI can create a Slurm account
+  backed by a shortcode and add you as a user. :contentReference[oaicite:2]{index=2}
+
+If you’re unsure which step you need, contact **arc-support@umich.edu**. :contentReference[oaicite:3]{index=3}
+
+
+2) Logging In
+=============
+
+Prerequisites
+-------------
+
+- Duo two-factor is required for HPC logins. :contentReference[oaicite:4]{index=4}
+- If off-campus, connect through the U-M VPN. :contentReference[oaicite:5]{index=5}
+
+SSH (Command Line)
+------------------
+
+Open a terminal and connect to the login nodes:
+
+.. code-block:: bash
+
+   ssh <uniqname>@greatlakes.arc-ts.umich.edu
+
+You’ll be prompted for your UMICH (Kerberos) password and Duo. First-time
+connections will show a host-key fingerprint prompt (normal). :contentReference[oaicite:6]{index=6}
+
+**On-campus-restricted software:** use the on-campus login/portal:
+
+- SSH: ``greatlakes-oncampus.arc-ts.umich.edu`` (from campus/VPN)
+- Web: open ``https://greatlakes-oncampus.arc-ts.umich.edu`` :contentReference[oaicite:7]{index=7}
+
+Open OnDemand (Web Portal)
+--------------------------
+
+Great Lakes also provides a browser UI for interactive sessions (Jupyter, RStudio,
+MATLAB, remote desktops) and job management:
+
+- Portal: ``https://greatlakes.arc-ts.umich.edu`` (campus or VPN) :contentReference[oaicite:8]{index=8}
+
+
+3) Storage & Paths
+==================
+
+You will primarily use two storage locations on Great Lakes:
+
+- ``/home`` — personal space for scripts, small data, builds (quota: **80 GB**).
+- ``/scratch`` — fast, **temporary** project space used while jobs run. Files
+  in ``/scratch`` are purged if **not accessed for 60 days**. Each Slurm
+  account also has a ``shared_data`` folder for collaboration. :contentReference[oaicite:9]{index=9}
+
+
+4) Submitting Jobs with Slurm
+=============================
+
+Batch jobs are submitted with :code:`sbatch`. Submit from a shared filesystem
+(e.g., your ``/home`` or ``/scratch``). Do *not* submit from ``/tmp``. :contentReference[oaicite:10]{index=10}
+
+Minimal Example
+---------------
+
+Save the following as ``hello.slurm``:
+
+.. code-block:: bash
+
+   #!/bin/bash
+   #SBATCH --job-name=hello
+   #SBATCH --account=<your_slurm_account>
+   #SBATCH --partition=standard
+   #SBATCH --nodes=1
+   #SBATCH --ntasks-per-node=1
+   #SBATCH --mem-per-cpu=1000m
+   #SBATCH --time=00:10:00
+   #SBATCH --mail-type=BEGIN,END
+
+   hostname
+   sleep 60
+
+Submit and monitor:
+
+.. code-block:: bash
+
+   sbatch hello.slurm          # submit the job
+   squeue -u $USER             # view your queued/running jobs
+   scancel <jobid>             # cancel a job
+
+(For more examples, arrays, srun/salloc, and accounting, see the Slurm User Guide.) :contentReference[oaicite:11]{index=11}
+
+
+Great Lakes Defaults & Limits (Quick Reference)
+-----------------------------------------------
+
+Some useful cluster defaults (check the user guide for complete/current values):
+
+- **Default walltime:** 60 minutes
+- **Default memory per CPU:** 768 MB
+- **Max queued jobs per user per account:** 5,000
+- **/home quota:** 80 GB
+- **/scratch purge policy:** files deleted after 60 days of *no access* :contentReference[oaicite:12]{index=12}
+
+Partitions (selected highlights; see the guide for full details and updates): standard, gpu, viz/debug, etc., each with distinct time and resource limits. :contentReference[oaicite:13]{index=13}
+
+
+5) Interactive Work
+===================
+
+Two options:
+
+- **Open OnDemand** apps (Jupyter, RStudio, MATLAB, remote desktops) via the web portal
+  — resources you request are billed to your Slurm account. :contentReference[oaicite:14]{index=14}
+- **Slurm CLI** (:code:`salloc` + :code:`srun`) for interactive shells and steps
+  on compute nodes. :contentReference[oaicite:15]{index=15}
+
+
+6) Data Transfer
+================
+
+For high-speed transfers, use **Globus** (preferred). The portal and docs are linked
+from the Great Lakes user guide landing page. :contentReference[oaicite:16]{index=16}
+
+For SFTP/SCP, use the data transfer endpoint (e.g., ``greatlakes-xfer.arc-ts.umich.edu``). :contentReference[oaicite:17]{index=17}
+
+
+7) Getting Help
+===============
+
+- **Docs hub (Great Lakes + Slurm + OnDemand):** central links page. :contentReference[oaicite:18]{index=18}
+- **Support:** email **arc-support@umich.edu** with details about your issue. :contentReference[oaicite:19]{index=19}
+
+
+Appendix: Handy Commands
+========================
+
+.. code-block:: bash
+
+   # Submit / monitor / cancel
+   sbatch myjob.slurm
+   squeue -u $USER
+   sacct -j <jobid>
+   scancel <jobid>
+
+   # Explore resources
+   sinfo
+   scontrol show job <jobid>
+
+   # Interactive allocations
+   salloc --account=<acct> --partition=standard --time=01:00:00 --mem=4g
+   srun --pty bash
+
+For a concise reference, see the Great Lakes cheat sheet. (Always verify current limits in the official guide.) :contentReference[oaicite:20]{index=20}
