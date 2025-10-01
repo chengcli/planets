@@ -13,10 +13,53 @@ def load_white_sand_weather(filename: str):
     #data["vel1"] = np.zeros_like(data["vel2"])  # no vertical velocity provided
     data["pres"] = data.pop("levels_hpa") * 100.
     data["time"] = data.pop("time_unix")
+    data["lat"] = data.pop("latitude")
+    data["lon"] = data.pop("longitude")
     print(f"time = {data['time']}")
     print(f"pressure shape = {data['pres'].shape}")
 
     return data
+
+def interpolate_to_grid(data: dict[str, np.ndarray],
+                        x3f: torch.Tensor,
+                        x2f: torch.Tensor,
+                        x1f: torch.Tensor,
+                        nghost: int) -> dict[str, np.ndarray]:
+    # center latitude and longitude
+    lat_center = 0.5 * (data["lat"][0] + data["lat"][-1])
+    lon_center = 0.5 * (data["lon"][0] + data["lon"][-1])
+
+    # calculate longitude span in data (x3)
+    lon_span = data["lon"][-1] - data["lon"][0]
+    lat_span = data["lat"][-1] - data["lat"][0]
+
+    # convert to distance in meters
+    R_earth = 6371000.0  # radius of the Earth in meters
+    lon_span_m = (lon_span / 360.0) * 2.0 * np.pi * R_earth * np.cos(np.radians(lat_center))
+    lat_span_m = (data["lat"][-1] - data["lat"][0]) / 360.0 * 2.0 * np.pi * R_earth
+
+    # adjust lon_span_m to be centered around zero
+    lon_span_m -= 0.5 * (lon_span_m[0] + lon_span_m[-1])
+    lat_span_m -= 0.5 * (lat_span_m[0] + lat_span_m[-1])
+
+    # center of computational grid
+    x2_center = 0.5 * (x2f[0] + x2f[-1])
+    x3_center = 0.5 * (x3f[0] + x3f[-1])
+
+    # match center and re-compute data coordinates
+    x3_coord = x3_center + lon_span_m
+    x2_coord = x2_center + lat_span_m
+
+    # output grid data
+    data_out = {}
+
+    # compute density
+    data_out["rho"] = data["pres"] / (287.05 * data["temp"])
+    print(data_out["rho"].shape)
+    
+
+    print(f"lon_span = {data['lon']} deg, {lon_span_m} m")
+    print(f"lat_span = {data['lat']} deg, {lat_span_m} m")
 
 # write weather data to netcdf file
 def write_weather_to_netcdf(weather_data, filename: str, resolution: str):
@@ -89,9 +132,14 @@ def create_weather_input(fname: str, x1f: torch.Tensor):
     data["rho"] = data["pres"] / (Rgas * data["temp"])
 
 def test_load_white_sand_weather():
-    fname = "era5_by_pressure_modules_2025_Jan_01_A.pt"
+    fname = "era5_by_pressure_modules_2025_Jan_01_AA.pt"
     data = load_white_sand_weather(fname)
-    write_weather_to_netcdf(data, "white_sand_weather_3d.nc", "40m")
+    interpolate_to_grid(data,
+                        x3f=torch.linspace(-20000.0, 20000.0, 201),
+                        x2f=torch.linspace(-20000.0, 20000.0, 201),
+                        x1f=torch.tensor(data["pres"]),
+                        nghost=3)
+    #write_weather_to_netcdf(data, "white_sand_weather_4d.nc", "40m")
 
 if __name__ == "__main__":
     test_load_white_sand_weather()
