@@ -1,6 +1,7 @@
 import torch
-from netCDF4 import Dataset
 import numpy as np
+from netCDF4 import Dataset
+from regrid import regrid_txyz_from_txyp
 
 def load_white_sand_weather(filename: str):
     module = torch.jit.load(filename)
@@ -23,11 +24,20 @@ def load_white_sand_weather(filename: str):
 def interpolate_to_grid(data: dict[str, np.ndarray],
                         x3f: torch.Tensor,
                         x2f: torch.Tensor,
-                        x1f: torch.Tensor,
-                        nghost: int) -> dict[str, np.ndarray]:
+                        x1f: torch.Tensor) -> dict[str, np.ndarray]:
+    """
+    Interpolate weather data to the specified grid.
+
+    Args:
+        x3f: 1D tensor of x3 face coordinates (meters), excluding ghost cells
+        x2f: 1D tensor of x2 face coordinates (meters), excluding ghost cells
+        x1f: 1D tensor of x1 face coordinates (meters), excluding ghost cells
+    """
+
     # constants
     radius_earth = 6371.e3  # radius of the Earth (m)
     grav_earth = 9.81  # m/s^2
+    rgas_earth = 287.05  # J/(kg·K) for dry air
 
     # center latitude and longitude
     lat_center = 0.5 * (data["lat"][0] + data["lat"][-1])
@@ -52,22 +62,55 @@ def interpolate_to_grid(data: dict[str, np.ndarray],
     print("x3_coord =", x3_coord)
     print("x2_coord =", x2_coord)
 
+    time, pres = data["time"], data["pres"]
+
+    # compute density at pressure levels (...,np)
+    data["rho"] = data["pres"] / (rgas_earth * data["temp"])
+    print(data["rho"][0,0,0,:])
+
+    # compute layer mean density (...,np-1)
+    rho_layer = 0.5 * (data["rho"][:, :, :, 1:] + data["rho"][:, :, :, :-1])
+
+    # compute layer thickness (...,np-1)
+    print("pres = ", data["pres"])
+    dz = (data["pres"][:-1] - data["pres"][1:]) / (grav_earth * rho_layer)
+    print(dz[0,0,0,:])
+
+    # compute height coordinate assuming z=0 at the bottom level
+    ntime, nx3, nx2, nx1 = data["rho"].shape
+    x1_coord = np.zeros((ntime, nx3, nx2, nx1))
+    zf[1:] = np.cumsum(dz, axis=-1)
+    z_coord = 0.5 * (zf[:, :, :, 1:] + zf[:, :, :, :-1])
+
     # output grid data
     data_out = {}
 
-    # compute density
-    data_out["rho"] = data["pres"] / (287.05 * data["temp"])
-    print(data_out["rho"].shape)
+    # interpolate field from (time, x3_coord, x2_coord, x1_coord-> (time, x3v, x2v, x1v)
+    for key in ["temp", "vel2", "vel3"]:
+        print(f"interpolating {key} ...")
+        interp_func = RegularGridInterpolator((time, x3_coord, x2_coord, pres),
+                                              data[key],
+                                              bounds_error=False,
+                                              fill_value=None)
 
-    # compute height from pressure using barometric formula
-    # layer mean density (...,np-1)
-    rho_layer = 0.5 * (data_out["rho"][:, :, :, 1:] + data_out["rho"][:, :, :, :-1])
+        # create meshgrid of (time, x3f, x2f, x1f)
+        x3v = 0.5 * (x3f[:-1] + x3f[1:])
+        x2v = 0.5 * (x2f[:-1] + x2f[1:])
+        x1v = 0.5 * (x1f[:-1] + x1f[1:])
+        t_mesh, x3_mesh, x2_mesh, x1_mesh = np.meshgrid(time, 
+                                                        x3v.numpy(), 
+                                                        x2v.numpy(),
+                                                        x1v.numpy(),
+                                                        indexing="ij")
+        points = np.array([t_mesh.flatten(),
+                           x3_mesh.flatten(),
+                           x2_mesh.flatten(),
+                           x1_mesh.flatten()]).T
 
-    # layer thickness (...,np-1)
-    print("pres = ", data["pres"])
-    dz = (data["pres"][:-1] - data["pres"][1:]) / (grav_earth * rho_layer)
-    print(dz)
-    
+        interp_values = interp_func(points)
+        data_out[key] = interp_values.reshape(t_mesh.shape)
+        print(f"{key} shape = {data_out[key].shape}")
+
 
     print(f"lon_m = {data['lon']} deg, {lon_m/1.e3} km")
     print(f"lat_m = {data['lat']} deg, {lat_m/1.e3} km")
@@ -143,11 +186,11 @@ def create_weather_input(fname: str, x1f: torch.Tensor):
     data["rho"] = data["pres"] / (Rgas * data["temp"])
 
 def test_load_white_sand_weather():
-    fname = "era5_by_pressure_modules_2025_Jan_01_AA.pt"
+    fname = "era5_by_pressure_modules_2025_Jan_01_AAA.pt"
     data = load_white_sand_weather(fname)
     interpolate_to_grid(data,
-                        x3f=torch.linspace(-20000.0, 20000.0, 201),
-                        x2f=torch.linspace(-20000.0, 20000.0, 201),
+                        x3f=torch.linspace(-20.E3, 20.E3, 201),
+                        x2f=torch.linspace(-20.E3, 20.E3, 201),
                         x1f=torch.tensor(data["pres"]),
                         nghost=3)
     #write_weather_to_netcdf(data, "white_sand_weather_4d.nc", "40m")
