@@ -25,30 +25,32 @@ def interpolate_to_grid(data: dict[str, np.ndarray],
                         x2f: torch.Tensor,
                         x1f: torch.Tensor,
                         nghost: int) -> dict[str, np.ndarray]:
+    # constants
+    radius_earth = 6371.e3  # radius of the Earth (m)
+    grav_earth = 9.81  # m/s^2
+
     # center latitude and longitude
     lat_center = 0.5 * (data["lat"][0] + data["lat"][-1])
     lon_center = 0.5 * (data["lon"][0] + data["lon"][-1])
 
-    # calculate longitude span in data (x3)
-    lon_span = data["lon"][-1] - data["lon"][0]
-    lat_span = data["lat"][-1] - data["lat"][0]
-
     # convert to distance in meters
-    R_earth = 6371000.0  # radius of the Earth in meters
-    lon_span_m = (lon_span / 360.0) * 2.0 * np.pi * R_earth * np.cos(np.radians(lat_center))
-    lat_span_m = (data["lat"][-1] - data["lat"][0]) / 360.0 * 2.0 * np.pi * R_earth
+    lon_m = (data["lon"] / 180.0) * np.pi * radius_earth * np.cos(np.radians(lat_center))
+    lat_m = data["lat"] / 180.0 * np.pi * radius_earth
 
     # adjust lon_span_m to be centered around zero
-    lon_span_m -= 0.5 * (lon_span_m[0] + lon_span_m[-1])
-    lat_span_m -= 0.5 * (lat_span_m[0] + lat_span_m[-1])
+    lon_m -= 0.5 * (lon_m[0] + lon_m[-1])
+    lat_m -= 0.5 * (lat_m[0] + lat_m[-1])
 
     # center of computational grid
     x2_center = 0.5 * (x2f[0] + x2f[-1])
     x3_center = 0.5 * (x3f[0] + x3f[-1])
 
     # match center and re-compute data coordinates
-    x3_coord = x3_center + lon_span_m
-    x2_coord = x2_center + lat_span_m
+    x3_coord = x3_center + lon_m
+    x2_coord = x2_center + lat_m
+
+    print("x3_coord =", x3_coord)
+    print("x2_coord =", x2_coord)
 
     # output grid data
     data_out = {}
@@ -56,10 +58,19 @@ def interpolate_to_grid(data: dict[str, np.ndarray],
     # compute density
     data_out["rho"] = data["pres"] / (287.05 * data["temp"])
     print(data_out["rho"].shape)
+
+    # compute height from pressure using barometric formula
+    # layer mean density (...,np-1)
+    rho_layer = 0.5 * (data_out["rho"][:, :, :, 1:] + data_out["rho"][:, :, :, :-1])
+
+    # layer thickness (...,np-1)
+    print("pres = ", data["pres"])
+    dz = (data["pres"][:-1] - data["pres"][1:]) / (grav_earth * rho_layer)
+    print(dz)
     
 
-    print(f"lon_span = {data['lon']} deg, {lon_span_m} m")
-    print(f"lat_span = {data['lat']} deg, {lat_span_m} m")
+    print(f"lon_m = {data['lon']} deg, {lon_m/1.e3} km")
+    print(f"lat_m = {data['lat']} deg, {lat_m/1.e3} km")
 
 # write weather data to netcdf file
 def write_weather_to_netcdf(weather_data, filename: str, resolution: str):
