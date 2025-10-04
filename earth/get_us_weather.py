@@ -1,7 +1,10 @@
 import torch
 import numpy as np
 from netCDF4 import Dataset
-from regrid import regrid_txyz_from_txyp
+from regrid import (
+        compute_z_from_p,
+        regrid_txyz_from_txyp
+        )
 
 def load_white_sand_weather(filename: str):
     module = torch.jit.load(filename)
@@ -62,62 +65,43 @@ def interpolate_to_grid(data: dict[str, np.ndarray],
     print("x3_coord =", x3_coord)
     print("x2_coord =", x2_coord)
 
-    time, pres = data["time"], data["pres"]
+    time, pres = data["time"].copy(), data["pres"].copy()
 
     # compute density at pressure levels (...,np)
     data["rho"] = data["pres"] / (rgas_earth * data["temp"])
-    print(data["rho"][0,0,0,:])
-
-    # compute layer mean density (...,np-1)
-    rho_layer = 0.5 * (data["rho"][:, :, :, 1:] + data["rho"][:, :, :, :-1])
-
-    # compute layer thickness (...,np-1)
-    print("pres = ", data["pres"])
-    dz = (data["pres"][:-1] - data["pres"][1:]) / (grav_earth * rho_layer)
-    print(dz[0,0,0,:])
-
-    # compute height coordinate assuming z=0 at the bottom level
-    ntime, nx3, nx2, nx1 = data["rho"].shape
-    x1_coord = np.zeros((ntime, nx3, nx2, nx1))
-    zf[1:] = np.cumsum(dz, axis=-1)
-    z_coord = 0.5 * (zf[:, :, :, 1:] + zf[:, :, :, :-1])
+    data["pres"] = data["rho"] * (rgas_earth * data["temp"])
 
     # output grid data
     data_out = {}
 
-    # interpolate field from (time, x3_coord, x2_coord, x1_coord-> (time, x3v, x2v, x1v)
-    for key in ["temp", "vel2", "vel3"]:
-        print(f"interpolating {key} ...")
-        interp_func = RegularGridInterpolator((time, x3_coord, x2_coord, pres),
-                                              data[key],
-                                              bounds_error=False,
-                                              fill_value=None)
+    # interpolate field from (time, x3_coord, x2_coord, pres) -> (time, x3v, x2v, x1v)
 
-        # create meshgrid of (time, x3f, x2f, x1f)
-        x3v = 0.5 * (x3f[:-1] + x3f[1:])
-        x2v = 0.5 * (x2f[:-1] + x2f[1:])
-        x1v = 0.5 * (x1f[:-1] + x1f[1:])
-        t_mesh, x3_mesh, x2_mesh, x1_mesh = np.meshgrid(time, 
-                                                        x3v.numpy(), 
-                                                        x2v.numpy(),
-                                                        x1v.numpy(),
-                                                        indexing="ij")
-        points = np.array([t_mesh.flatten(),
-                           x3_mesh.flatten(),
-                           x2_mesh.flatten(),
-                           x1_mesh.flatten()]).T
+    x3v = 0.5 * (x3f[:-1] + x3f[1:])
+    x2v = 0.5 * (x2f[:-1] + x2f[1:])
+    x1v = 0.5 * (x1f[:-1] + x1f[1:])
 
-        interp_values = interp_func(points)
-        data_out[key] = interp_values.reshape(t_mesh.shape)
+    # Build z(t,x,y,p)
+    z_txyp = compute_z_from_p(pres, data["rho"], grav_earth) # (T,X,Y,P)
+
+    for key in ["temp", "rho", "pres", "vel2", "vel3"]:
+        print(f"Interpolating {key} ...")
+        data_out[key] = regrid_txyz_from_txyp(
+            data[key],
+            z_txyp,
+            (time, x3_coord, x2_coord, pres),
+            (x3v, x2v, x1v),
+            grav_earth,
+        )
         print(f"{key} shape = {data_out[key].shape}")
-
 
     print(f"lon_m = {data['lon']} deg, {lon_m/1.e3} km")
     print(f"lat_m = {data['lat']} deg, {lat_m/1.e3} km")
 
+    return data_out
+
 # write weather data to netcdf file
-def write_weather_to_netcdf(weather_data, filename: str, resolution: str):
-    res = float(resolution[:-1])  # extract numeric part of resolution
+def write_weather_to_netcdf(weather_data, filename: str,
+                            resolution: str):
     with Dataset(filename, "w", format="NETCDF4") as ncfile:
         # permute data from (time, x3, x2, x1) to (time, x1, x2, x3)
         temp = weather_data["temp"].transpose(0, 3, 2, 1)
@@ -148,9 +132,12 @@ def write_weather_to_netcdf(weather_data, filename: str, resolution: str):
         zvar.axis = "Z"
 
         tvar[:] = np.arange(temp.shape[0]).astype("f4")
-        zvar[:] = pres.astype("f4")
-        yvar[:] = (np.arange(temp.shape[2]) * res).astype("f4")
-        xvar[:] = (np.arange(temp.shape[3]) * res).astype("f4")
+        if pres.ndim == 1:
+            zvar[:] = pres.astype("f4")
+        else:
+            zvar[:] = pres.mean(axis=(0,1,2)).astype("f4")
+        yvar[:] = np.arange(temp.shape[2]).astype("f4")
+        xvar[:] = np.arange(temp.shape[3]).astype("f4")
         
         # Create variables
         temp_var = ncfile.createVariable("temp", "f4", ("time", "x1", "x2", "x3"))
@@ -158,13 +145,14 @@ def write_weather_to_netcdf(weather_data, filename: str, resolution: str):
         temp_var.long_name = "Air Temperature"
         temp_var[:] = temp
 
-        #pres_var = ncfile.createVariable("pres", "f4", ("time", "x1", "x2", "x3"))
-        #pres_var.units = "Pa"
-        #pres_var.long_name = "Air Pressure"
-        # broadcast pressure (nx1,) to (ntime, nx1, nx2, nx3)
-        #pres_var[:] = pres.reshape(1, nx1, 1, 1) \
-        #                  .repeat((ntime, 1, nx2, nx3)) \
-        #                  .copy()
+        pres_var = ncfile.createVariable("pres", "f4", ("time", "x1", "x2", "x3"))
+        pres_var.units = "Pa"
+        pres_var.long_name = "Air Pressure"
+        if pres.ndim == 1:
+            # broadcast pressure (nx1,) to (ntime, nx1, nx2, nx3)
+            pres_var[:] = pres[None, :, None, None].astype("f4")
+        else:
+            pres_var[:] = pres.transpose(0, 3, 2, 1).astype("f4")
 
         vel2_var = ncfile.createVariable("vel2", "f4", ("time", "x1", "x2", "x3"))
         vel2_var.units = "m/s"
@@ -180,20 +168,51 @@ def write_weather_to_netcdf(weather_data, filename: str, resolution: str):
         ncfile.description = "4D weather data loaded from TorchScript"
         ncfile.source = "Generated by write_weather_to_netcdf function"
 
-def create_weather_input(fname: str, x1f: torch.Tensor):
-    # calcualte density using ideal gas law
-    Rgas = 287.05  # J/(kg·K) for dry air
-    data["rho"] = data["pres"] / (Rgas * data["temp"])
+def create_weather_input(fname: str,
+                         x3f: torch.Tensor,
+                         x3f: torch.Tensor,
+                         x1f: torch.Tensor,
+                         nghost: int):
+    fname = "era5_by_pressure_modules_2025_Jan_01_AAA.pt"
+    data = load_white_sand_weather(fname)
+
+    data_out = interpolate_to_grid(data,
+                        x3f=x3f[nghost:-nghost],
+                        x2f=x2f[nghost:-nghost],
+                        x1f=x1f[nghost:-nghost])
+
+    # convert to torch tensors and add ghost cells
+    result = {}
+
+    for key in ["rho", "vel2", "vel3", "pres"]:
+        arr = data_out[key]
+        ntime, nx3, nx2, nx1 = arr.shape
+        tensor = torch.full((ntime, nx3 + 2*nghost, nx2 + 2*nghost, nx1 + 2*nghost),
+                            0., dtype=torch.float64)
+        tensor[:, nghost:-nghost, nghost:-nghost, nghost:-nghost] = torch.from_numpy(arr)
+        result[key] = tensor
+        print(f"{key} shape = {result[key].shape}")
+
+        # fill ghost cells by nearest neighbor
+        result[key][:, :nghost, :, :] = result[key][:, nghost:nghost+1, :, :]
+        result[key][:, -nghost:, :, :] = result[key][:, -nghost-1:-nghost, :, :]
+        result[key][:, :, :nghost, :] = result[key][:, :, nghost:nghost+1, :]
+        result[key][:, :, -nghost:, :] = result[key][:, :, -nghost-1:-nghost, :]
+        result[key][:, :, :, :nghost] = result[key][:, :, :, nghost:nghost+1]
+        result[key][:, :, :, -nghost:] = result[key][:, :, :, -nghost-1:-nghost]
+
+    return result
+
 
 def test_load_white_sand_weather():
     fname = "era5_by_pressure_modules_2025_Jan_01_AAA.pt"
     data = load_white_sand_weather(fname)
-    interpolate_to_grid(data,
+    data_out = interpolate_to_grid(data,
                         x3f=torch.linspace(-20.E3, 20.E3, 201),
                         x2f=torch.linspace(-20.E3, 20.E3, 201),
-                        x1f=torch.tensor(data["pres"]),
-                        nghost=3)
-    #write_weather_to_netcdf(data, "white_sand_weather_4d.nc", "40m")
+                        x1f=torch.linspace(0., 10.E3, 101))
+    write_weather_to_netcdf(data, "white_sand_weather_4d.nc", "40m")
+    write_weather_to_netcdf(data_out, "white_sand_weather_4d_grid.nc", "40m")
 
 if __name__ == "__main__":
     test_load_white_sand_weather()

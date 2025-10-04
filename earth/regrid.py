@@ -1,12 +1,12 @@
-from __future__ import annotations
+from typing import Tuple
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
 def compute_z_from_p(
-    p: np.ndarray,         # (P,) pressure levels [Pa], typically decreasing with height
-    rho: np.ndarray,       # (T, X, Y, P) density [kg/m^3]
-    grav: float = 9.80665,    # gravity [m/s^2]
+    p: np.ndarray,      # (P,) pressure levels [Pa], typically decreasing with height
+    rho: np.ndarray,    # (T, X, Y, P) density [kg/m^3]
+    grav: float,        # gravity [m/s^2]
 ) -> np.ndarray:
     """
     Convert pressure levels to geometric height at each (t,x,y) using
@@ -34,7 +34,7 @@ def compute_z_from_p(
     inv_rho = 1.0 / rho
     inv_rho_mid = 0.5 * (inv_rho[..., :-1] + inv_rho[..., 1:]) # (T,X,Y,P-1)
     dp = (p[:-1] - p[1:])[None, None, None, :]                 # (1,1,1,P-1), positive if p decreases upward
-    dz_layers = (dp * inv_rho_mid) / g                         # (T,X,Y,P-1)
+    dz_layers = (dp * inv_rho_mid) / grav                      # (T,X,Y,P-1)
 
     # z at full levels with z[...,0] = 0 (relative to bottom)
     z = np.zeros((T, X, Y, P), dtype=rho.dtype)
@@ -100,7 +100,12 @@ def horizontal_regrid_xy(
     Returns:
         field_on_out: (X_out, Y_out)
     """
-    interp = RegularGridInterpolator((x, y), field, bounds_error=False, fill_value=np.nan)
+    interp = RegularGridInterpolator((x, y),
+                                     field,
+                                     method="cubic",
+                                     bounds_error=False, 
+                                     fill_value=np.nan)
+
     Xo, Yo = np.meshgrid(x_out, y_out, indexing="ij")  # (X_out, Y_out)
     pts = np.stack([Xo.ravel(), Yo.ravel()], axis=-1)
     Fo = interp(pts).reshape(Xo.shape)
@@ -108,17 +113,12 @@ def horizontal_regrid_xy(
 
 
 def regrid_txyz_from_txyp(
-    data_txyp: np.ndarray,   # (T, X, Y, P) variable on (t,x,y,p)
-    rho_txyp: np.ndarray,    # (T, X, Y, P) density [kg/m^3]
-    t: np.ndarray,           # (T,)
-    x: np.ndarray,           # (X,)
-    y: np.ndarray,           # (Y,)
-    p: np.ndarray,           # (P,) [Pa], typically decreasing with height
-    x_out: np.ndarray,       # (X',) monotonic 1D
-    y_out: np.ndarray,       # (Y',) monotonic 1D
-    z_out: np.ndarray,       # (Z',) monotonic increasing 1D [m]
-    grav: float = 9.80665,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    data_txyp: np.ndarray,  # (T, X, Y, P) variable on (t,x,y,p)
+    z_txyp: np.ndarray,     # (T, X, Y, P) height at (t,x,y,p)
+    inp_coord: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    out_coord: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    grav: float,
+    ) -> np.ndarray:
     """
     Full pipeline: (t,x,y,p) → compute z(t,x,y,p) → interpolate vertically to z'
     → horizontally to (x',y') for each (t,z').
@@ -127,18 +127,18 @@ def regrid_txyz_from_txyp(
         data_txyz: (T, X', Y', Z') on (t, x', y', z')
         t, x_out, y_out, z_out (passed-through for convenience)
     """
+    t, x, y, p = inp_coord
+    x_out, y_out, z_out = out_coord
+
     T, X, Y, P = data_txyp.shape
-    if rho_txyp.shape != data_txyp.shape:
+    if z_txyp.shape != data_txyp.shape:
         raise ValueError("rho_txyp must have the same shape as data_txyp (T,X,Y,P).")
 
-    # 1) Build z(t,x,y,p)
-    z_txyp = compute_z_from_p(p, rho_txyp, g=g)                            # (T,X,Y,P)
-
-    # 2) Vertical interpolation to z' per (t,x,y) column
-    #    Output shape: (T, X, Y, Z)
+    # (1) Vertical interpolation to z' per (t,x,y) column
+    #     Output shape: (T, X, Y, Z)
     data_txyz_on_orig_xy = vertical_interp_to_z(z_txyp, data_txyp, z_out)  # (T,X,Y,Z)
 
-    # 3) Horizontal regrid for each (t,z') slice
+    # (2) Horizontal regrid for each (t,z') slice
     Xo, Yo, Zo = len(x_out), len(y_out), len(z_out)
     data_txyz = np.full((T, Xo, Yo, Zo), np.nan, dtype=data_txyp.dtype)
 
