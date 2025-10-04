@@ -1,2 +1,9 @@
+# ignore data files
 # nc
 *.nc
+
+# pt
+*.pt
+
+# python cache
+__pycache__/
