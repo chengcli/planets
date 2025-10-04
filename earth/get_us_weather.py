@@ -170,7 +170,7 @@ def write_weather_to_netcdf(weather_data, filename: str,
 
 def create_weather_input(fname: str,
                          x3f: torch.Tensor,
-                         x3f: torch.Tensor,
+                         x2f: torch.Tensor,
                          x1f: torch.Tensor,
                          nghost: int):
     fname = "era5_by_pressure_modules_2025_Jan_01_AAA.pt"
