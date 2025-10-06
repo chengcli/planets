@@ -42,66 +42,6 @@ def evolve_kinetics(block, kinet, thermo_x):
     del_rho = del_conc / inv_mu[1:].view((1, 1, 1, -1))
     return del_rho.permute((3, 0, 1, 2))
 
-def setup_initial_condition(block, thermo_x):
-    Ts = 300.
-    Ps = 1.e5
-    xH2O = 0.02
-    Tmin = 110.
-    grav = 9.8
-
-    # get handles to modules
-    coord = block.module("hydro.coord")
-    thermo_y = block.module("hydro.eos.thermo")
-
-    # get coordinates
-    x3v, x2v, x1v = torch.meshgrid(
-        coord.buffer("x3v"), coord.buffer("x2v"), coord.buffer("x1v"), indexing="ij"
-    )
-
-    # get dimensions
-    nc3, nc2, nc1 = x1v.shape
-    ny = len(thermo_y.options.species()) - 1
-    print('ny = ', ny)
-
-    w = block.buffer("hydro.eos.W")
-
-    temp = Ts * torch.ones((nc3, nc2), dtype=w.dtype, device=w.device)
-    pres = Ps * torch.ones((nc3, nc2), dtype=w.dtype, device=w.device)
-
-    iH2O = thermo_y.options.species().index("H2O")
-    print('iH2O = ', iH2O)
-
-    xfrac = torch.zeros((nc3, nc2, ny + 1), dtype=w.dtype, device=w.device)
-    xfrac[..., iH2O] = xH2O
-
-    # dry air mole fraction
-    xfrac[..., 0] = 1. - xH2O
-
-    # start and end indices for the vertical direction
-    ifirst = coord.ifirst()
-    ilast = coord.ilast()
-
-    # vertical grid distance of the first cell
-    dz = coord.buffer("dx1f")[ifirst]
-
-    # half a grid to cell center
-    thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz);
-
-    # adiabatic extrapolation
-    for i in range(ifirst, ilast):
-        conc = thermo_x.compute("TPX->V", (temp, pres, xfrac))
-
-        w[index.ipr, ..., i] = pres;
-        w[index.idn, ..., i] = thermo_x.compute("V->D", (conc,))
-        w[index.icy:,...,i] = thermo_x.compute("X->Y", (xfrac,))
-
-        dz = coord.buffer("dx1f")[i]
-        thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz);
-
-    # initialize hydro state
-    block.initialize(w)
-    return w
-
 if __name__ == '__main__':
     # input file
     infile = "earth.yaml"
