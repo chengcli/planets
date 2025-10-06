@@ -55,4 +55,9 @@ if __name__ == "__main__":
     print("Setting up Saturn dry-adiabat profiles")
     w, block = setup_saturn_profile("saturn1d.yaml", "dry-adiabat")
     write_profile(f"saturn_profile_dry.txt", w, block)
+
+    print("Setting up Saturn neutral density profiles")
+    w, block = setup_saturn_profile("saturn1d.yaml", "neutral")
+    write_profile(f"saturn_profile_neutral.txt", w, block)
+
     print("Saturn profiles setup complete.")
