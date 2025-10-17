@@ -12,6 +12,7 @@ class FreedmanMean(torch.nn.Module):
                 temp: torch.Tensor, 
                 pres: torch.Tensor, 
                 dens: torch.Tensor) -> torch.Tensor:
+        # coefficient from Richard S. Freedman 2014. APJS
         c1 = 10.602
         c2 = 2.882
         c3 = 6.09e-15
