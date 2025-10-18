@@ -19,82 +19,10 @@ from kintera import (
         Kinetics,
         evolve_implicit,
         )
-from paddle import setup_profile
+#from paddle import setup_profile
+from setup_profile import setup_profile
 
 torch.set_default_dtype(torch.float64)
-
-def setup_moist_adiabatic_profile(config, coord, eos, thermo_x,
-                                  device=torch.device("cpu")):
-    Tmin = float(config["problem"]["Tmin"])
-    grav = - float(config["forcing"]["const-gravity"]["grav1"])
-    Ps = float(config["problem"]["Ps"])
-    Ts = float(config["problem"]["Ts"])
-
-    # dimensions
-    nc3 = coord.buffer("x3v").shape[0]
-    nc2 = coord.buffer("x2v").shape[0]
-    nc1 = coord.buffer("x1v").shape[0]
-    ny = len(thermo_x.options.species()) - 1
-    nvar = eos.nvar()
-
-    temp = Ts * torch.ones((nc3, nc2), device=device)
-    pres = Ps * torch.ones((nc3, nc2), device=device)
-    xfrac = torch.zeros((nc3, nc2, 1 + ny), device=device)
-
-    # read in compositions
-    for i in range(1, 1 + ny):
-        name = 'x' + thermo_x.options.species()[i]
-        if name in config["problem"]:
-            xfrac[:, :, i] = float(config["problem"][name])
-
-    # dry air mole fraction
-    xfrac[:, :, 0] = 1.0 - xfrac[:, :, 1:].sum(dim=2)
-
-    # adiabatic extrapolate half a grid
-    ifirst = coord.ifirst()
-    dx1f = coord.buffer("dx1f")
-    dz = dx1f[ifirst].item()
-    thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz / 2.0)
-
-    nvapor = len(thermo_x.options.vapor_ids())
-    ncloud = len(thermo_x.options.cloud_ids())
-    i = ifirst
-    w = torch.zeros((nvar, nc3, nc2, nc1), device=device)
-    while i < coord.ilast():
-        # drop clouds
-        for cid in thermo_x.options.cloud_ids():
-            xfrac[..., cid] = 0.0
-        # renormalize mole fractions
-        xfrac /= xfrac.sum(dim=-1, keepdim=True)
-        conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-
-        w[index.ipr, :, :, i] = pres
-        w[index.idn, :, :, i] = thermo_x.compute("V->D", [conc])
-        w[index.icy:, :, :, i] = thermo_x.compute("X->Y", [xfrac])
-
-        if (temp < Tmin).any().item():
-            break
-            raise ValueError("Temperature below minimum")
-        dz = dx1f[i].item()
-        thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz)
-        i += 1
-
-    # isothermal extrapolation
-    while i < coord.ilast():
-        mu = (thermo_x.buffer("mu") * xfrac).sum(-1);
-        dz = dx1f[i].item()
-        pres *= torch.exp(-grav * mu * dz / (kintera.constants.Rgas * temp))
-        conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-        w[index.ipr, :, :, i] = pres
-        w[index.idn, :, :, i] = thermo_x.compute("V->D", [conc])
-        w[index.icy:, :, :, i] = thermo_x.compute("X->Y", [xfrac])
-        i += 1
-
-    # add noise
-    w[index.ivx] += 0.01 * torch.rand_like(w[index.ivx])
-    w[index.ivy] += 0.01 * torch.rand_like(w[index.ivy])
-
-    return w;
 
 def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
     # evolve kinetics
@@ -157,14 +85,18 @@ if __name__ == "__main__":
         data = {name: param for name, param in module.named_buffers()}
         block_vars["hydro_w"][interior] = data["hydro_w"].to(device)
     else:
-        block_vars["hydro_w"] = setup_moist_adiabatic_profile(
-                config, coord, eos, thermo_x, device=device)
-        #param = {}
-        #param["Ts"] = float(config["problem"]["Ts"])
-        #param["Ps"] = float(config["problem"]["Ps"])
-        #param["grav"] = - float(config["forcing"]["const-gravity"]["grav1"])
-        #param["Tmin"] = float(config["problem"]["Tmin"])
-        #setup_profile(block, param, method="pseudo-adiabat")
+        #block_vars["hydro_w"] = setup_moist_adiabatic_profile(
+                #config, coord, eos, thermo_x, device=device)
+        param = {}
+        param["Ts"] = float(config["problem"]["Ts"])
+        param["Ps"] = float(config["problem"]["Ps"])
+        param["grav"] = - float(config["forcing"]["const-gravity"]["grav1"])
+        param["Tmin"] = float(config["problem"]["Tmin"])
+        for name in thermo_y.options.species():
+            param[f"x{name}"] = float(config["problem"].get(f"x{name}", 0.0))
+        block_vars["hydro_w"] = setup_profile(block,
+                                              param,
+                                              method="pseudo-adiabat")
 
     # initialize
     block_vars = block.initialize(block_vars)
@@ -207,7 +139,7 @@ if __name__ == "__main__":
         x1v = coord.buffer("x1v")
         z0 = 80.e3
         dTdt = torch.zeros_like(x1v, device=device)
-        dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 10.
+        dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 100.
 
         for stage in range(len(block.intg.stages)):
             block.forward(dt, stage, block_vars)
