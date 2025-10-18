@@ -24,7 +24,7 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 100.e3, x2min: 0., x2max: 100.e3, x3min: 0., x3max: 100.e3}
+  bounds: {x1min: 0., x1max: 100.e3, x2min: 0., x2max: 400.e3, x3min: 0., x3max: 400.e3}
   cells: {nx1: 100, nx2: 100, nx3: 1, nghost: 3}
 
 dynamics:
@@ -65,7 +65,7 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.45
-  implicit-scheme: 0
+  implicit-scheme: 1
   nlim: -1
   tlim: 8640
 
@@ -99,5 +99,5 @@ reactions:
 problem:
   Ps: 20.e5
   Ts: 500.
-  Tmin: 200.
+  Tmin: 500.
   xH2O: 0.2
