@@ -21,9 +21,11 @@ from kintera import (
         )
 #from paddle import setup_profile
 from setup_profile import setup_profile
+from evolve_kinetics import evolve_kinetics
 
 torch.set_default_dtype(torch.float64)
 
+'''
 def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
     # evolve kinetics
     hydro_u = block_vars["hydro_u"]
@@ -47,6 +49,7 @@ def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
     inv_mu = thermo_y.buffer("inv_mu")
     del_rho = del_conc / inv_mu[1:].view(1, 1, 1, -1)
     hydro_u[index.icy:, :, :, :] += del_rho.permute(3, 0, 1, 2)
+'''
 
 if __name__ == "__main__":
     infile = "k2-18b.yaml"
@@ -139,7 +142,7 @@ if __name__ == "__main__":
         x1v = coord.buffer("x1v")
         z0 = 80.e3
         dTdt = torch.zeros_like(x1v, device=device)
-        dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 100.
+        dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 1000.
 
         for stage in range(len(block.intg.stages)):
             block.forward(dt, stage, block_vars)
@@ -152,7 +155,10 @@ if __name__ == "__main__":
             u = block_vars["hydro_u"]
             weight = block.intg.stages[stage].wght2()
             u[index.ipr] += weight * w[index.idn] * cv * dTdt * dt
-        evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt)
+
+        #evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt)
+        del_rho = evolve_kinetics(block_vars["hydro_w"], block, kinet, thermo_x, dt)
+        block_vars["hydro_u"][index.icy:, :, :, :] += del_rho
 
         count += 1
         current_time += dt
