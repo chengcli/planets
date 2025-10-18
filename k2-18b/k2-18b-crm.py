@@ -199,9 +199,27 @@ if __name__ == "__main__":
                 out.combine_blocks()
 
         # evolve dynamics
+        # linear cooling rate:
+        # dT/dt = - A * (z - z0), z > z0
+        #       = 0, z <= z0
+        # dE/dt = - rho * cv * dTdt
+        A = 1.e-5        # K / s
+        x1v = coord.buffer("x1v")
+        z0 = 80.e3
+        dTdt = torch.zeros_like(x1v, device=device)
+        dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 10.
+
         for stage in range(len(block.intg.stages)):
             block.forward(dt, stage, block_vars)
 
+            # add cooling
+            w = block_vars["hydro_w"]
+            ivol = thermo_y.compute("DY->V", (w[index.idn], w[index.icy:]))
+            temp = eos.compute("W->T", (w,))
+            cv = thermo_y.compute("VT->cv", (ivol, temp))
+            u = block_vars["hydro_u"]
+            weight = block.intg.stages[stage].wght2()
+            u[index.ipr] += weight * w[index.idn] * cv * dTdt * dt
         evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt)
 
         count += 1
