@@ -10,7 +10,7 @@ from snapy import (
         MeshBlockOptions,
         MeshBlock,
         OutputOptions,
-        NetcdfOutput
+        NetcdfOutput,
         )
 from kintera import (
         ThermoOptions,
@@ -19,37 +19,12 @@ from kintera import (
         Kinetics,
         evolve_implicit,
         )
-#from paddle import setup_profile
-from setup_profile import setup_profile
-from evolve_kinetics import evolve_kinetics
+from paddle import (
+        setup_profile,
+        evolve_kinetics,
+        )
 
 torch.set_default_dtype(torch.float64)
-
-'''
-def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
-    # evolve kinetics
-    hydro_u = block_vars["hydro_u"]
-    hydro_w = block_vars["hydro_w"]
-
-    temp = eos.compute("W->T", [hydro_w])
-    pres = hydro_w[index.ipr]
-    xfrac = thermo_y.compute("Y->X", [hydro_w[index.icy:, :, :, :]])
-    conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-    cp_vol = thermo_x.compute("TV->cp", [temp, conc])
-
-    conc_kinet = conc[:, :, :, 1:]
-    #conc_kinet = kinet.options.narrow_copy(conc, thermo_y.options)
-
-    rate, rc_ddC, rc_ddT = kinet.forward_nogil(temp, pres, conc_kinet)
-    jac = kinet.jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT)
-
-    stoich = kinet.buffer("stoich")
-    del_conc = evolve_implicit(rate, stoich, jac, dt)
-
-    inv_mu = thermo_y.buffer("inv_mu")
-    del_rho = del_conc / inv_mu[1:].view(1, 1, 1, -1)
-    hydro_u[index.icy:, :, :, :] += del_rho.permute(3, 0, 1, 2)
-'''
 
 if __name__ == "__main__":
     infile = "k2-18b.yaml"
@@ -88,8 +63,6 @@ if __name__ == "__main__":
         data = {name: param for name, param in module.named_buffers()}
         block_vars["hydro_w"][interior] = data["hydro_w"].to(device)
     else:
-        #block_vars["hydro_w"] = setup_moist_adiabatic_profile(
-                #config, coord, eos, thermo_x, device=device)
         param = {}
         param["Ts"] = float(config["problem"]["Ts"])
         param["Ps"] = float(config["problem"]["Ps"])
@@ -156,7 +129,6 @@ if __name__ == "__main__":
             weight = block.intg.stages[stage].wght2()
             u[index.ipr] += weight * w[index.idn] * cv * dTdt * dt
 
-        #evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt)
         del_rho = evolve_kinetics(block_vars["hydro_w"], block, kinet, thermo_x, dt)
         block_vars["hydro_u"][index.icy:, :, :, :] += del_rho
 
