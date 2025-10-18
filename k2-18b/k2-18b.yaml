@@ -65,9 +65,9 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.45
-  implicit-scheme: 1
+  implicit-scheme: 9
   nlim: -1
-  tlim: 8640
+  tlim: 86400
 
 forcing:
   const-gravity:
@@ -100,4 +100,4 @@ problem:
   Ps: 20.e5
   Ts: 500.
   Tmin: 500.
-  xH2O: 0.2
+  xH2O: 0.1
