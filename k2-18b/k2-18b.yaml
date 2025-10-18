@@ -25,7 +25,7 @@ species:
 geometry:
   type: cartesian
   bounds: {x1min: 0., x1max: 100.e3, x2min: 0., x2max: 100.e3, x3min: 0., x3max: 100.e3}
-  cells: {nx1: 100, nx2: 1, nx3: 1, nghost: 3}
+  cells: {nx1: 100, nx2: 100, nx3: 1, nghost: 3}
 
 dynamics:
   equation-of-state:
@@ -66,7 +66,7 @@ integration:
   type: rk3
   cfl: 0.45
   implicit-scheme: 0
-  nlim: 1
+  nlim: -1
   tlim: 8640
 
 forcing:
@@ -97,7 +97,7 @@ reactions:
     rate-constant: {formula: h2o_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
 
 problem:
-  Ps: 10.e5
+  Ps: 20.e5
   Ts: 500.
   Tmin: 200.
   xH2O: 0.2

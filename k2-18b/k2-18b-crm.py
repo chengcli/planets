@@ -19,6 +19,7 @@ from kintera import (
         Kinetics,
         evolve_implicit,
         )
+from paddle import setup_profile
 
 torch.set_default_dtype(torch.float64)
 
@@ -60,15 +61,16 @@ def setup_moist_adiabatic_profile(config, coord, eos, thermo_x,
     i = ifirst
     w = torch.zeros((nvar, nc3, nc2, nc1), device=device)
     while i < coord.ilast():
-        print("i = ", i)
+        # drop clouds
+        for cid in thermo_x.options.cloud_ids():
+            xfrac[..., cid] = 0.0
+        # renormalize mole fractions
+        xfrac /= xfrac.sum(dim=-1, keepdim=True)
         conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
 
         w[index.ipr, :, :, i] = pres
         w[index.idn, :, :, i] = thermo_x.compute("V->D", [conc])
         w[index.icy:, :, :, i] = thermo_x.compute("X->Y", [xfrac])
-
-        # drop clouds
-        #w[int(index.icy) + nvapor:,:,:,i] = 0.
 
         if (temp < Tmin).any().item():
             break
@@ -135,7 +137,7 @@ if __name__ == "__main__":
     coord = block.hydro.module("coord")
     thermo_y = block.hydro.module("eos.thermo")
     eos = block.hydro.get_eos()
-    thermo_y.options.max_iter(100)
+    thermo_y.options.max_iter(50)
 
     thermo_x = ThermoX(thermo_y.options)
     thermo_x.to(device)
@@ -157,6 +159,12 @@ if __name__ == "__main__":
     else:
         block_vars["hydro_w"] = setup_moist_adiabatic_profile(
                 config, coord, eos, thermo_x, device=device)
+        #param = {}
+        #param["Ts"] = float(config["problem"]["Ts"])
+        #param["Ps"] = float(config["problem"]["Ps"])
+        #param["grav"] = - float(config["forcing"]["const-gravity"]["grav1"])
+        #param["Tmin"] = float(config["problem"]["Tmin"])
+        #setup_profile(block, param, method="pseudo-adiabat")
 
     # initialize
     block_vars = block.initialize(block_vars)
@@ -176,19 +184,14 @@ if __name__ == "__main__":
         dt = block.max_time_step(block_vars)
 
         # make output
-        if count % 1000 == 0:
+        if count % 100 == 0:
             print(f"count = {count}, dt = {dt}, time = {current_time}", flush=True)
             u = block_vars["hydro_u"]
             w = block_vars["hydro_w"]
             print("mass = ", u[interior][index.idn].sum(), flush=True)
 
             qtol = block_vars["hydro_w"][index.icy:, :, :, :].sum(dim=0)
-            ivol = thermo_y.compute("DY->V", (w[index.idn], w[index.icy:]))
-            temp = thermo_y.compute("PV->T", (w[index.ipr], ivol))
-            #theta = temp * (p0 / w[index.ipr]).pow(Rd / cp)
-
             block.set_uov("qtol", qtol)
-            block.set_uov("temp", temp)
 
             for out in [out2, out3, out4]:
                 out.increment_file_number()
