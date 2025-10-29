@@ -1,0 +1,93 @@
+# Jupiter Reference Atmosphere Model
+# 
+# Solar abundances relative to H2, enrichments
+#
+# X_He  = 0.195, 0.6955
+# X_CH4 = 5.50e-04, 9.4
+# X_H2O = 1.026e-03, 10.0
+# X_NH3 = 1.352e-04, 3.0
+# X_H2S = 3.10e-05,  3.0
+#
+# Converted to mole fractions
+#
+# X_H2O = 8.91e-03
+# X_NH3 = 3.52e-04
+# X_H2S = 8.08e-05
+#
+# Dry air composition
+#
+# 0.86838 * H2 + 0.11778 * He + 4.49e-03 * CH4
+# {H: 1.755, He: 0.118, C: 4.49e-03}
+
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+  - name: H2O
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: NH3
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: H2S
+    composition: {H: 2, S: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: H2O(l)
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+  - name: NH3(s)
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -5520.
+
+  - name: NH4SH(s)
+    composition: {N: 1, H: 5, S: 1}
+    cv_R: 9.0
+    u0_R: -1.2e4
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 300.E3}
+  cells: {nx1: 100, nghost: 0}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    max-iter: 20
+    ftol: 1.e-6
+
+boundary-condition:
+  internal:
+    solid-density: 1.e3
+    solid-pressure: 1.e9
+    max-iter: 5
+
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+
+reactions:
+  - equation: H2O => H2O(l)
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+  - equation: NH3 => NH3(s)
+    type: nucleation
+    rate-constant: {formula: nh3_ideal}
+
+  - equation: NH3 + H2S <=> NH4SH(s)
+    type: nucleation
+    rate-constant: {formula: nh3_h2s_lewis}
