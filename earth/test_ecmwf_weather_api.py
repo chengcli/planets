@@ -208,9 +208,9 @@ class TestECMWFWeatherAPI(unittest.TestCase):
             self.assertEqual(request['area'], [40.0, -110.0, 30.0, -100.0])
         
         finally:
-                # Clean up
-                if os.path.exists(output_file):
-                    os.remove(output_file)
+            # Clean up
+            if os.path.exists(output_file):
+                os.remove(output_file)
     
     def test_fetch_weather_data_with_defaults(self):
         """Test fetching weather data with default parameters."""
