@@ -288,7 +288,10 @@ class ECMWFWeatherAPI:
         
         # Create output file path
         if output_file is None:
-            output_file = tempfile.mktemp(suffix=f'.{format}')
+            # Use NamedTemporaryFile to securely create the file
+            temp_file = tempfile.NamedTemporaryFile(suffix=f'.{format}', delete=False)
+            output_file = temp_file.name
+            temp_file.close()
         
         # Construct the request
         request = {
