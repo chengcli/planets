@@ -2,7 +2,7 @@
 ECMWF Weather Data Fetching and Processing API
 
 This module provides an API for fetching and processing ECMWF ERA5 weather data.
-Given geological bounds, atmospheric variables, and a time window, it queries
+Given geographical bounds, atmospheric variables, and a time window, it queries
 and fetches public ECMWF weather data using the Climate Data Store (CDS) API.
 
 Requirements:
