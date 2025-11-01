@@ -1,6 +1,6 @@
 # Earth's weather and climate API
 
-This directory contains an API for accessing and analyzing Earth's weather and climate data. The API provides endpoints for several endpoints for retrieving current weather conditions, historical climate data, and forecasts.
+This directory contains an API for accessing and analyzing Earth's weather and climate data. The API provides several endpoints for retrieving current weather conditions, historical climate data, and forecasts.
 
 ## Installation
 
