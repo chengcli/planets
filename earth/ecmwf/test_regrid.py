@@ -15,7 +15,6 @@ from regrid import (
     horizontal_regrid_xy,
     regrid_pressure_to_height,
     regrid_topography,
-    compute_z_from_p,
 )
 
 
@@ -330,28 +329,6 @@ class TestRegridTopography(unittest.TestCase):
         self.assertEqual(result.shape, (len(x2f), len(x3f)))
 
 
-class TestBackwardCompatibility(unittest.TestCase):
-    """Test cases for backward compatibility with old functions."""
-    
-    def test_compute_z_from_p_legacy(self):
-        """Test that legacy compute_z_from_p still works."""
-        T, X, Y, P = 2, 5, 6, 4
-        p = np.array([100000., 80000., 60000., 40000.])
-        rho = np.ones((T, X, Y, P)) * 1.2
-        grav = 9.81
-        
-        z = compute_z_from_p(p, rho, grav)
-        
-        # Check shape
-        self.assertEqual(z.shape, (T, X, Y, P))
-        
-        # Check bottom is at zero
-        np.testing.assert_array_equal(z[..., 0], 0.0)
-        
-        # Check heights are increasing
-        self.assertTrue(np.all(np.diff(z, axis=-1) > 0))
-
-
 def run_tests():
     """Run all tests."""
     # Create test suite
@@ -366,7 +343,6 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestHorizontalRegridXy))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridPressureToHeight))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridTopography))
-    suite.addTests(loader.loadTestsFromTestCase(TestBackwardCompatibility))
     
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)
