@@ -14,6 +14,7 @@ The pipeline:
 
 import numpy as np
 from regrid import (
+    compute_height_grid,
     regrid_pressure_to_height,
     regrid_topography,
     save_regridded_data_to_netcdf,
@@ -137,32 +138,16 @@ def main():
     planet_grav = 9.81       # m/s^2 (Earth gravity)
     planet_radius = 6371.e3  # m (Earth radius)
     
-    # Step 4: Regrid temperature to distance grids
-    print("\n3. Regridding temperature field...")
-    print("   This may take a moment...")
+    # Step 4: Compute height grid once (efficient for multiple variables)
+    print("\n3. Computing height grid (once for all variables)...")
     
     try:
-        temp_tzyx = regrid_pressure_to_height(
-            temp_tpll,
-            rho_tpll,
-            topo_ll,
-            plev,
-            lats,
-            lons,
-            x1f,
-            x2f,
-            x3f,
-            planet_grav,
-            planet_radius,
-            bounds_error=False  # Allow NaNs at boundaries
-        )
-        
-        print(f"   Output shape: {temp_tzyx.shape}")
-        print(f"   Output temperature range: [{np.nanmin(temp_tzyx):.2f}, {np.nanmax(temp_tzyx):.2f}] K")
-        print(f"   Valid data fraction: {np.sum(~np.isnan(temp_tzyx)) / temp_tzyx.size:.1%}")
+        z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+        print(f"   Height grid shape: {z_tpll.shape}")
+        print(f"   Height range: [{z_tpll.min():.2f}, {z_tpll.max():.2f}] m")
         
     except ValueError as e:
-        print(f"   Error during regridding: {e}")
+        print(f"   Error computing height grid: {e}")
         return
     
     # Step 5: Regrid topography
@@ -181,8 +166,37 @@ def main():
     print(f"   Output shape: {topo_yx.shape}")
     print(f"   Output topography range: [{np.nanmin(topo_yx):.2f}, {np.nanmax(topo_yx):.2f}] m")
     
-    # Step 6: Regrid density as well (optional, but shown for completeness)
-    print("\n5. Regridding density field...")
+    # Step 6: Regrid temperature using pre-computed heights
+    print("\n5. Regridding temperature field (using pre-computed heights)...")
+    print("   This may take a moment...")
+    
+    try:
+        temp_tzyx = regrid_pressure_to_height(
+            temp_tpll,
+            rho_tpll,
+            topo_ll,
+            plev,
+            lats,
+            lons,
+            x1f,
+            x2f,
+            x3f,
+            planet_grav,
+            planet_radius,
+            bounds_error=False,  # Allow NaNs at boundaries
+            z_tpll=z_tpll  # Use pre-computed heights for efficiency
+        )
+        
+        print(f"   Output shape: {temp_tzyx.shape}")
+        print(f"   Output temperature range: [{np.nanmin(temp_tzyx):.2f}, {np.nanmax(temp_tzyx):.2f}] K")
+        print(f"   Valid data fraction: {np.sum(~np.isnan(temp_tzyx)) / temp_tzyx.size:.1%}")
+        
+    except ValueError as e:
+        print(f"   Error during regridding: {e}")
+        return
+    
+    # Step 7: Regrid density using same pre-computed heights (efficient!)
+    print("\n6. Regridding density field (using pre-computed heights)...")
     
     rho_tzyx = regrid_pressure_to_height(
         rho_tpll,
@@ -196,14 +210,16 @@ def main():
         x3f,
         planet_grav,
         planet_radius,
-        bounds_error=False
+        bounds_error=False,
+        z_tpll=z_tpll  # Reuse pre-computed heights - no recomputation!
     )
     
     print(f"   Output shape: {rho_tzyx.shape}")
     print(f"   Output density range: [{np.nanmin(rho_tzyx):.3f}, {np.nanmax(rho_tzyx):.3f}] kg/m^3")
+    print(f"\n   Note: Heights computed once and reused for both variables!")
     
-    # Step 7: Save to NetCDF files
-    print("\n6. Saving regridded data to NetCDF files...")
+    # Step 8: Save to NetCDF files
+    print("\n7. Saving regridded data to NetCDF files...")
     
     # Prepare variables dictionary
     variables = {
@@ -270,7 +286,7 @@ def main():
         print(f"   Warning: Could not save NetCDF files: {e}")
         print("   (netCDF4 package may not be installed)")
     
-    # Step 8: Summary
+    # Step 9: Summary
     print("\n" + "=" * 70)
     print("Summary")
     print("=" * 70)

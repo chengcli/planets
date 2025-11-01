@@ -12,6 +12,7 @@ import numpy as np
 from regrid import (
     compute_dz_from_plev,
     compute_heights_from_dz,
+    compute_height_grid,
     latlon_to_xy,
     vertical_interp_to_z,
     horizontal_regrid_xy,
@@ -108,6 +109,34 @@ class TestComputeHeightsFromDz(unittest.TestCase):
         # Heights should be relative to topography
         np.testing.assert_array_almost_equal(z[0, 1, :, :], topo + 50.0)
         np.testing.assert_array_almost_equal(z[0, 2, :, :], topo + 100.0)
+
+
+class TestComputeHeightGrid(unittest.TestCase):
+    """Test cases for compute_height_grid function."""
+    
+    def test_basic_height_grid_computation(self):
+        """Test basic height grid computation."""
+        T, P, Lat, Lon = 2, 4, 5, 6
+        plev = np.array([100000., 80000., 60000., 40000.])  # Pa
+        rho = np.ones((T, P, Lat, Lon)) * 1.2
+        topo = np.random.randn(Lat, Lon) * 100.0
+        grav = 9.81
+        
+        z_tpll = compute_height_grid(rho, topo, plev, grav)
+        
+        # Check shape
+        self.assertEqual(z_tpll.shape, (T, P, Lat, Lon))
+        
+        # Check that bottom is at topographic elevation
+        for t in range(T):
+            np.testing.assert_array_almost_equal(z_tpll[t, 0, :, :], topo)
+        
+        # Check that heights increase with decreasing pressure
+        for t in range(T):
+            for lat in range(Lat):
+                for lon in range(Lon):
+                    heights = z_tpll[t, :, lat, lon]
+                    self.assertTrue(np.all(np.diff(heights) > 0))
 
 
 class TestLatlonToXy(unittest.TestCase):
@@ -277,6 +306,66 @@ class TestRegridPressureToHeight(unittest.TestCase):
         
         # Check output shape
         self.assertEqual(result.shape, (T, len(x1f), len(x2f), len(x3f)))
+    
+    def test_with_precomputed_heights(self):
+        """Test regridding with pre-computed heights for efficiency."""
+        # Create test data
+        T, P, Lat, Lon = 2, 4, 6, 8
+        plev = np.array([100000., 80000., 60000., 40000.])  # Pa
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        # Create two variables to regrid
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        # Output grids
+        x1f = np.linspace(0., 5000., 20)
+        x2f = np.linspace(-1000., 1000., 10)
+        x3f = np.linspace(-2000., 2000., 15)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Compute heights once
+        z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+        
+        # Regrid multiple variables with pre-computed heights
+        temp_result = regrid_pressure_to_height(
+            temp_tpll, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            z_tpll=z_tpll
+        )
+        
+        humid_result = regrid_pressure_to_height(
+            humid_tpll, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            z_tpll=z_tpll
+        )
+        
+        # Check output shapes
+        self.assertEqual(temp_result.shape, (T, len(x1f), len(x2f), len(x3f)))
+        self.assertEqual(humid_result.shape, (T, len(x1f), len(x2f), len(x3f)))
+        
+        # Verify results match when computed without pre-computed heights
+        temp_result_no_precomp = regrid_pressure_to_height(
+            temp_tpll, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False
+        )
+        
+        np.testing.assert_array_almost_equal(temp_result, temp_result_no_precomp)
         
     def test_domain_bounds_error(self):
         """Test that exceeding domain bounds raises error."""
@@ -488,6 +577,7 @@ def run_tests():
     # Add all test cases
     suite.addTests(loader.loadTestsFromTestCase(TestComputeDzFromPlev))
     suite.addTests(loader.loadTestsFromTestCase(TestComputeHeightsFromDz))
+    suite.addTests(loader.loadTestsFromTestCase(TestComputeHeightGrid))
     suite.addTests(loader.loadTestsFromTestCase(TestLatlonToXy))
     suite.addTests(loader.loadTestsFromTestCase(TestVerticalInterpToZ))
     suite.addTests(loader.loadTestsFromTestCase(TestHorizontalRegridXy))

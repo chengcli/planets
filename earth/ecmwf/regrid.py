@@ -7,6 +7,7 @@ grids to uniform Cartesian distance grids (height-Y-X) for atmospheric modeling.
 Functions:
     compute_dz_from_plev: Compute layer thickness from pressure levels
     compute_heights_from_dz: Compute absolute heights from layer thickness and topography
+    compute_height_grid: Compute height grid once for reuse with multiple variables
     latlon_to_xy: Convert lat/lon to local Cartesian coordinates
     vertical_interp_to_z: Vertical interpolation to uniform height grid
     horizontal_regrid_xy: Horizontal regridding on regular grids
@@ -90,6 +91,43 @@ def compute_heights_from_dz(
     z[:, 1:, :, :] = topo[None, None, :, :] + np.cumsum(dz, axis=1)
 
     return z
+
+
+def compute_height_grid(
+    rho_tpll: np.ndarray,      # (T, P, Lat, Lon) air density [kg/m^3]
+    topo_ll: np.ndarray,       # (Lat, Lon) topographic elevation [m]
+    plev: np.ndarray,          # (P,) pressure levels [Pa]
+    planet_grav: float,        # gravity constant [m/s^2]
+) -> np.ndarray:
+    """
+    Compute height grid at pressure levels for all grid points.
+    
+    This function computes the height field once, which can then be reused
+    for regridding multiple variables, improving efficiency.
+    
+    Args:
+        rho_tpll: (T, P, Lat, Lon) air density [kg/m^3]
+        topo_ll: (Lat, Lon) topographic elevation [m]
+        plev: (P,) pressure levels [Pa], typically decreasing with height
+        planet_grav: gravity constant [m/s^2]
+        
+    Returns:
+        z_tpll: (T, P, Lat, Lon) height [m] at pressure levels
+        
+    Example:
+        >>> # Compute heights once
+        >>> z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+        >>> # Reuse for multiple variables
+        >>> temp_tzyx = regrid_pressure_to_height(temp_tpll, rho_tpll, ..., z_tpll=z_tpll)
+        >>> humid_tzyx = regrid_pressure_to_height(humid_tpll, rho_tpll, ..., z_tpll=z_tpll)
+    """
+    # Step 1: Compute layer thickness from pressure levels
+    dz_tpll = compute_dz_from_plev(plev, rho_tpll, planet_grav)  # (T, P-1, Lat, Lon)
+    
+    # Step 2: Add layer thickness to topographic elevation
+    z_tpll = compute_heights_from_dz(dz_tpll, topo_ll)  # (T, P, Lat, Lon)
+    
+    return z_tpll
 
 
 def latlon_to_xy(
@@ -275,12 +313,13 @@ def regrid_pressure_to_height(
     planet_grav: float,        # gravity constant [m/s^2]
     planet_radius: float,      # radius of the planet [m]
     bounds_error: bool = True, # If True, raise error when extrapolation would occur
+    z_tpll: Optional[np.ndarray] = None,  # (T, P, Lat, Lon) pre-computed heights [m]
 ) -> np.ndarray:
     """
     Complete regridding pipeline from ECMWF ERA5 pressure-lat-lon data to distance grids.
     
     Steps:
-    1. Compute layer thickness from pressure levels and density
+    1. Compute layer thickness from pressure levels and density (or use pre-computed heights)
     2. Add layer thickness to topographic elevation to get heights at pressure levels
     3. Interpolate variables vertically to uniform height grid
     4. Convert lat/lon to local Cartesian coordinates (Y, X)
@@ -299,12 +338,21 @@ def regrid_pressure_to_height(
         planet_grav: gravity constant [m/s^2]
         planet_radius: radius of the planet [m]
         bounds_error: If True, raise error when extrapolation would occur
+        z_tpll: Optional pre-computed (T, P, Lat, Lon) heights [m]. If provided,
+                skips height computation (Steps 1-2) for efficiency when regridding
+                multiple variables. Compute once using compute_height_grid().
         
     Returns:
         var_tzyx: (T, Z, Y, X) variable on distance grids
         
     Raises:
         ValueError: If output domain exceeds input domain when bounds_error=True
+        
+    Example:
+        >>> # Efficient regridding of multiple variables
+        >>> z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+        >>> temp_tzyx = regrid_pressure_to_height(temp_tpll, ..., z_tpll=z_tpll)
+        >>> humid_tzyx = regrid_pressure_to_height(humid_tpll, ..., z_tpll=z_tpll)
     """
     T, P, Lat, Lon = var_tpll.shape
     
@@ -320,11 +368,16 @@ def regrid_pressure_to_height(
     if lons.shape[0] != Lon:
         raise ValueError(f"lons length {lons.shape[0]} must match Lon dimension {Lon}")
     
-    # Step 1: Compute layer thickness from pressure levels
-    dz_tpll = compute_dz_from_plev(plev, rho_tpll, planet_grav)  # (T, P-1, Lat, Lon)
-    
-    # Step 2: Add layer thickness to topographic elevation
-    z_tpll = compute_heights_from_dz(dz_tpll, topo_ll)  # (T, P, Lat, Lon)
+    # Step 1-2: Compute or use pre-computed height grid
+    if z_tpll is None:
+        # Compute layer thickness from pressure levels
+        dz_tpll = compute_dz_from_plev(plev, rho_tpll, planet_grav)  # (T, P-1, Lat, Lon)
+        # Add layer thickness to topographic elevation
+        z_tpll = compute_heights_from_dz(dz_tpll, topo_ll)  # (T, P, Lat, Lon)
+    else:
+        # Validate pre-computed heights
+        if z_tpll.shape != var_tpll.shape:
+            raise ValueError(f"z_tpll shape {z_tpll.shape} must match var_tpll shape {var_tpll.shape}")
     
     # Step 3: Vertical interpolation to uniform height grid
     # Reshape to (T, Lat, Lon, P) for vertical_interp_to_z
