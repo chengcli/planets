@@ -12,9 +12,12 @@ Functions:
     horizontal_regrid_xy: Horizontal regridding on regular grids
     regrid_pressure_to_height: Complete pipeline from (T,P,Lat,Lon) to (T,Z,Y,X)
     regrid_topography: Regrid topographic elevation to distance grids
+    save_regridded_data_to_netcdf: Save regridded atmospheric data to NetCDF with metadata
+    save_topography_to_netcdf: Save regridded topography to NetCDF with metadata
 """
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
+from datetime import datetime
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -460,6 +463,261 @@ def regrid_topography(
     ).T  # Transpose back to (Y, X)
     
     return topo_yx
+
+
+def save_regridded_data_to_netcdf(
+    filename: str,
+    variables: Dict[str, np.ndarray],
+    coordinates: Dict[str, np.ndarray],
+    metadata: Optional[Dict[str, Any]] = None,
+    processing_history: Optional[str] = None,
+) -> None:
+    """
+    Save regridded atmospheric data to NetCDF file with metadata preservation.
+    
+    Args:
+        filename: Output NetCDF file path
+        variables: Dictionary of variable arrays, e.g., {'temperature': array, 'density': array}
+                  Each array should have shape (T, Z, Y, X) where:
+                  - T: time dimension
+                  - Z: height dimension (x1f)
+                  - Y: Y-coordinate dimension (x2f, North-South)
+                  - X: X-coordinate dimension (x3f, East-West)
+        coordinates: Dictionary with coordinate arrays:
+                    - 'time': (T,) time values
+                    - 'x1f': (Z,) height coordinates in meters
+                    - 'x2f': (Y,) Y-coordinates in meters
+                    - 'x3f': (X,) X-coordinates in meters
+        metadata: Optional dictionary with metadata to preserve (e.g., source info, units)
+        processing_history: Optional processing history string to add to global attributes
+        
+    Example:
+        >>> variables = {'temperature': temp_tzyx, 'density': rho_tzyx}
+        >>> coordinates = {'time': times, 'x1f': x1f, 'x2f': x2f, 'x3f': x3f}
+        >>> metadata = {'source': 'ECMWF ERA5', 'region': 'White Sands, NM'}
+        >>> save_regridded_data_to_netcdf('output.nc', variables, coordinates, metadata)
+    """
+    try:
+        from netCDF4 import Dataset
+    except ImportError:
+        raise ImportError(
+            "netCDF4 package is required for saving data. "
+            "Install it with: pip install netCDF4"
+        )
+    
+    with Dataset(filename, "w", format="NETCDF4") as ncfile:
+        # Get dimensions from first variable
+        first_var = next(iter(variables.values()))
+        T, Z, Y, X = first_var.shape
+        
+        # Create dimensions
+        ncfile.createDimension("time", T)
+        ncfile.createDimension("x1", Z)  # Height dimension
+        ncfile.createDimension("x2", Y)  # Y dimension (North-South)
+        ncfile.createDimension("x3", X)  # X dimension (East-West)
+        
+        # Create coordinate variables
+        time_var = ncfile.createVariable("time", "f8", ("time",))
+        x1_var = ncfile.createVariable("x1", "f8", ("x1",))
+        x2_var = ncfile.createVariable("x2", "f8", ("x2",))
+        x3_var = ncfile.createVariable("x3", "f8", ("x3",))
+        
+        # Set coordinate attributes
+        time_var.axis = "T"
+        time_var.long_name = "time"
+        if 'time' in coordinates:
+            time_var[:] = coordinates['time'].astype("f8")
+            # Try to infer time units from metadata
+            if metadata and 'time_units' in metadata:
+                time_var.units = metadata['time_units']
+            else:
+                time_var.units = "hours since 1900-01-01 00:00:00"
+        else:
+            time_var[:] = np.arange(T, dtype="f8")
+            time_var.units = "timestep"
+        
+        x1_var.axis = "Z"
+        x1_var.long_name = "height"
+        x1_var.units = "meters"
+        x1_var.positive = "up"
+        if 'x1f' in coordinates:
+            x1_var[:] = coordinates['x1f'].astype("f8")
+        else:
+            x1_var[:] = np.arange(Z, dtype="f8")
+        
+        x2_var.axis = "Y"
+        x2_var.long_name = "y_coordinate"
+        x2_var.units = "meters"
+        x2_var.standard_name = "projection_y_coordinate"
+        if 'x2f' in coordinates:
+            x2_var[:] = coordinates['x2f'].astype("f8")
+        else:
+            x2_var[:] = np.arange(Y, dtype="f8")
+        
+        x3_var.axis = "X"
+        x3_var.long_name = "x_coordinate"
+        x3_var.units = "meters"
+        x3_var.standard_name = "projection_x_coordinate"
+        if 'x3f' in coordinates:
+            x3_var[:] = coordinates['x3f'].astype("f8")
+        else:
+            x3_var[:] = np.arange(X, dtype="f8")
+        
+        # Create data variables
+        for var_name, var_data in variables.items():
+            if var_data.shape != (T, Z, Y, X):
+                raise ValueError(
+                    f"Variable '{var_name}' has shape {var_data.shape}, "
+                    f"expected ({T}, {Z}, {Y}, {X})"
+                )
+            
+            var = ncfile.createVariable(var_name, "f4", ("time", "x1", "x2", "x3"))
+            var[:] = var_data.astype("f4")
+            
+            # Set variable attributes from metadata
+            if metadata and f"{var_name}_units" in metadata:
+                var.units = metadata[f"{var_name}_units"]
+            if metadata and f"{var_name}_long_name" in metadata:
+                var.long_name = metadata[f"{var_name}_long_name"]
+            if metadata and f"{var_name}_standard_name" in metadata:
+                var.standard_name = metadata[f"{var_name}_standard_name"]
+        
+        # Set global attributes
+        ncfile.title = "Regridded ECMWF ERA5 Data"
+        ncfile.institution = "Generated by ECMWF regridding module"
+        ncfile.source = metadata.get('source', 'ECMWF ERA5') if metadata else 'ECMWF ERA5'
+        ncfile.conventions = "CF-1.8"
+        ncfile.creation_date = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        
+        # Add coordinate system information
+        ncfile.coordinate_system = "Local Cartesian projection"
+        ncfile.grid_description = (
+            "Distance grid with x1 (height) in meters positive upward, "
+            "x2 (Y) in meters positive northward, "
+            "x3 (X) in meters positive eastward"
+        )
+        
+        # Add processing history
+        if processing_history:
+            ncfile.history = processing_history
+        else:
+            ncfile.history = (
+                f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}: "
+                f"Regridded from pressure-lat-lon to distance grids using ECMWF regridding module"
+            )
+        
+        # Add any additional metadata
+        if metadata:
+            for key, value in metadata.items():
+                # Skip keys already handled
+                if key in ['source', 'time_units'] or '_units' in key or '_long_name' in key or '_standard_name' in key:
+                    continue
+                # Convert value to string if it's not a basic type
+                if isinstance(value, (str, int, float)):
+                    setattr(ncfile, key, value)
+                else:
+                    setattr(ncfile, key, str(value))
+
+
+def save_topography_to_netcdf(
+    filename: str,
+    topography: np.ndarray,
+    x2f: np.ndarray,
+    x3f: np.ndarray,
+    metadata: Optional[Dict[str, Any]] = None,
+    processing_history: Optional[str] = None,
+) -> None:
+    """
+    Save regridded topographic elevation to NetCDF file.
+    
+    Args:
+        filename: Output NetCDF file path
+        topography: (Y, X) topographic elevation array in meters
+        x2f: (Y,) Y-coordinates in meters
+        x3f: (X,) X-coordinates in meters
+        metadata: Optional dictionary with metadata to preserve
+        processing_history: Optional processing history string
+        
+    Example:
+        >>> save_topography_to_netcdf('topography.nc', topo_yx, x2f, x3f,
+        ...                          metadata={'source': 'USGS DEM'})
+    """
+    try:
+        from netCDF4 import Dataset
+    except ImportError:
+        raise ImportError(
+            "netCDF4 package is required for saving data. "
+            "Install it with: pip install netCDF4"
+        )
+    
+    Y, X = topography.shape
+    
+    if x2f.shape[0] != Y:
+        raise ValueError(f"x2f length {x2f.shape[0]} must match Y dimension {Y}")
+    if x3f.shape[0] != X:
+        raise ValueError(f"x3f length {x3f.shape[0]} must match X dimension {X}")
+    
+    with Dataset(filename, "w", format="NETCDF4") as ncfile:
+        # Create dimensions
+        ncfile.createDimension("x2", Y)
+        ncfile.createDimension("x3", X)
+        
+        # Create coordinate variables
+        x2_var = ncfile.createVariable("x2", "f8", ("x2",))
+        x3_var = ncfile.createVariable("x3", "f8", ("x3",))
+        
+        x2_var.axis = "Y"
+        x2_var.long_name = "y_coordinate"
+        x2_var.units = "meters"
+        x2_var.standard_name = "projection_y_coordinate"
+        x2_var[:] = x2f.astype("f8")
+        
+        x3_var.axis = "X"
+        x3_var.long_name = "x_coordinate"
+        x3_var.units = "meters"
+        x3_var.standard_name = "projection_x_coordinate"
+        x3_var[:] = x3f.astype("f8")
+        
+        # Create topography variable
+        topo_var = ncfile.createVariable("topography", "f4", ("x2", "x3"))
+        topo_var[:] = topography.astype("f4")
+        topo_var.units = "meters"
+        topo_var.long_name = "topographic elevation"
+        topo_var.standard_name = "surface_altitude"
+        topo_var.positive = "up"
+        
+        # Set global attributes
+        ncfile.title = "Regridded Topographic Elevation"
+        ncfile.institution = "Generated by ECMWF regridding module"
+        ncfile.source = metadata.get('source', 'Unknown') if metadata else 'Unknown'
+        ncfile.conventions = "CF-1.8"
+        ncfile.creation_date = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        
+        # Add coordinate system information
+        ncfile.coordinate_system = "Local Cartesian projection"
+        ncfile.grid_description = (
+            "Distance grid with x2 (Y) in meters positive northward, "
+            "x3 (X) in meters positive eastward"
+        )
+        
+        # Add processing history
+        if processing_history:
+            ncfile.history = processing_history
+        else:
+            ncfile.history = (
+                f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}: "
+                f"Regridded from lat-lon to distance grids using ECMWF regridding module"
+            )
+        
+        # Add any additional metadata
+        if metadata:
+            for key, value in metadata.items():
+                if key == 'source':
+                    continue
+                if isinstance(value, (str, int, float)):
+                    setattr(ncfile, key, value)
+                else:
+                    setattr(ncfile, key, str(value))
 
 
 # --------------------------

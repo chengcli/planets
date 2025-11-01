@@ -15,7 +15,9 @@ The pipeline:
 import numpy as np
 from regrid import (
     regrid_pressure_to_height,
-    regrid_topography
+    regrid_topography,
+    save_regridded_data_to_netcdf,
+    save_topography_to_netcdf,
 )
 
 
@@ -179,7 +181,96 @@ def main():
     print(f"   Output shape: {topo_yx.shape}")
     print(f"   Output topography range: [{np.nanmin(topo_yx):.2f}, {np.nanmax(topo_yx):.2f}] m")
     
-    # Step 6: Summary
+    # Step 6: Regrid density as well (optional, but shown for completeness)
+    print("\n5. Regridding density field...")
+    
+    rho_tzyx = regrid_pressure_to_height(
+        rho_tpll,
+        rho_tpll,  # Using density itself for the computation
+        topo_ll,
+        plev,
+        lats,
+        lons,
+        x1f,
+        x2f,
+        x3f,
+        planet_grav,
+        planet_radius,
+        bounds_error=False
+    )
+    
+    print(f"   Output shape: {rho_tzyx.shape}")
+    print(f"   Output density range: [{np.nanmin(rho_tzyx):.3f}, {np.nanmax(rho_tzyx):.3f}] kg/m^3")
+    
+    # Step 7: Save to NetCDF files
+    print("\n6. Saving regridded data to NetCDF files...")
+    
+    # Prepare variables dictionary
+    variables = {
+        'temperature': temp_tzyx,
+        'density': rho_tzyx,
+    }
+    
+    # Prepare coordinates dictionary
+    coordinates = {
+        'time': np.arange(T, dtype=float),  # In practice, use actual time values
+        'x1f': x1f,
+        'x2f': x2f,
+        'x3f': x3f,
+    }
+    
+    # Prepare metadata
+    metadata = {
+        'source': 'ECMWF ERA5 Reanalysis',
+        'region': 'White Sands, New Mexico',
+        'temperature_units': 'K',
+        'temperature_long_name': 'Air Temperature',
+        'temperature_standard_name': 'air_temperature',
+        'density_units': 'kg m-3',
+        'density_long_name': 'Air Density',
+        'density_standard_name': 'air_density',
+        'time_units': 'hours since 2025-01-01 00:00:00',
+    }
+    
+    # Processing history
+    processing_history = (
+        f"Regridded from ECMWF ERA5 pressure-lat-lon grids to Cartesian distance grids. "
+        f"Original domain: lat [{lats[0]:.2f}, {lats[-1]:.2f}] deg, "
+        f"lon [{lons[0]:.2f}, {lons[-1]:.2f}] deg, "
+        f"pressure [{plev[-1]/100:.0f}, {plev[0]/100:.0f}] hPa. "
+        f"Output domain: x1 [{x1f[0]:.0f}, {x1f[-1]:.0f}] m, "
+        f"x2 [{x2f[0]:.0f}, {x2f[-1]:.0f}] m, "
+        f"x3 [{x3f[0]:.0f}, {x3f[-1]:.0f}] m. "
+        f"Planet radius: {planet_radius/1000:.0f} km, gravity: {planet_grav:.2f} m/s^2."
+    )
+    
+    try:
+        # Save atmospheric data
+        save_regridded_data_to_netcdf(
+            'regridded_era5_data.nc',
+            variables,
+            coordinates,
+            metadata,
+            processing_history
+        )
+        print("   ✓ Saved atmospheric data to: regridded_era5_data.nc")
+        
+        # Save topography
+        save_topography_to_netcdf(
+            'regridded_topography.nc',
+            topo_yx,
+            x2f,
+            x3f,
+            metadata={'source': 'Regridded from original topography'},
+            processing_history=processing_history
+        )
+        print("   ✓ Saved topography to: regridded_topography.nc")
+        
+    except Exception as e:
+        print(f"   Warning: Could not save NetCDF files: {e}")
+        print("   (netCDF4 package may not be installed)")
+    
+    # Step 8: Summary
     print("\n" + "=" * 70)
     print("Summary")
     print("=" * 70)
@@ -188,10 +279,14 @@ def main():
     print(f"  Output: (T={T}, Z={len(x1f)}, Y={len(x2f)}, X={len(x3f)})")
     print(f"\nThe regridded data is now on a regular Cartesian grid suitable for")
     print(f"atmospheric modeling and analysis.")
-    print("\nNext steps:")
-    print("  - Save the regridded data to NetCDF files")
-    print("  - Use for atmospheric model initialization")
-    print("  - Perform analysis on the uniform grid")
+    print("\nOutput files:")
+    print("  - regridded_era5_data.nc: Atmospheric variables (temperature, density, etc.)")
+    print("  - regridded_topography.nc: Topographic elevation")
+    print("\nMetadata preserved:")
+    print("  - Source information")
+    print("  - Variable units and descriptions")
+    print("  - Processing history")
+    print("  - Coordinate system information")
     print("=" * 70)
 
 

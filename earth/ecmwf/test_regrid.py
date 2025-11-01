@@ -6,6 +6,8 @@ that convert ECMWF ERA5 data from pressure-lat-lon grids to distance grids.
 """
 
 import unittest
+import os
+import tempfile
 import numpy as np
 from regrid import (
     compute_dz_from_plev,
@@ -15,6 +17,8 @@ from regrid import (
     horizontal_regrid_xy,
     regrid_pressure_to_height,
     regrid_topography,
+    save_regridded_data_to_netcdf,
+    save_topography_to_netcdf,
 )
 
 
@@ -329,6 +333,152 @@ class TestRegridTopography(unittest.TestCase):
         self.assertEqual(result.shape, (len(x2f), len(x3f)))
 
 
+class TestSaveToNetCDF(unittest.TestCase):
+    """Test cases for NetCDF saving functions."""
+    
+    def setUp(self):
+        """Set up temporary directory for test files."""
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def tearDown(self):
+        """Clean up temporary files."""
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def test_save_regridded_data_basic(self):
+        """Test basic save of regridded atmospheric data."""
+        # Create test data
+        T, Z, Y, X = 3, 5, 4, 6
+        temp_data = 280.0 + np.random.randn(T, Z, Y, X) * 10.0
+        rho_data = 1.0 + np.random.randn(T, Z, Y, X) * 0.1
+        
+        variables = {
+            'temperature': temp_data,
+            'density': rho_data,
+        }
+        
+        coordinates = {
+            'time': np.arange(T, dtype=float),
+            'x1f': np.linspace(0., 5000., Z),
+            'x2f': np.linspace(-1000., 1000., Y),
+            'x3f': np.linspace(-2000., 2000., X),
+        }
+        
+        metadata = {
+            'source': 'Test data',
+            'temperature_units': 'K',
+            'temperature_long_name': 'Air Temperature',
+            'density_units': 'kg/m^3',
+            'density_long_name': 'Air Density',
+        }
+        
+        filename = os.path.join(self.temp_dir, 'test_regridded.nc')
+        
+        # Save data
+        save_regridded_data_to_netcdf(filename, variables, coordinates, metadata)
+        
+        # Verify file was created
+        self.assertTrue(os.path.exists(filename))
+        
+        # Try to load and verify (if netCDF4 is available)
+        try:
+            from netCDF4 import Dataset
+            with Dataset(filename, 'r') as ncfile:
+                # Check dimensions
+                self.assertEqual(len(ncfile.dimensions['time']), T)
+                self.assertEqual(len(ncfile.dimensions['x1']), Z)
+                self.assertEqual(len(ncfile.dimensions['x2']), Y)
+                self.assertEqual(len(ncfile.dimensions['x3']), X)
+                
+                # Check variables exist
+                self.assertIn('temperature', ncfile.variables)
+                self.assertIn('density', ncfile.variables)
+                
+                # Check coordinate variables
+                self.assertIn('x1', ncfile.variables)
+                self.assertIn('x2', ncfile.variables)
+                self.assertIn('x3', ncfile.variables)
+                
+                # Check units
+                self.assertEqual(ncfile.variables['x1'].units, 'meters')
+                self.assertEqual(ncfile.variables['x2'].units, 'meters')
+                self.assertEqual(ncfile.variables['x3'].units, 'meters')
+                
+                # Check global attributes
+                self.assertIn('history', ncfile.ncattrs())
+                self.assertIn('source', ncfile.ncattrs())
+                self.assertEqual(ncfile.source, 'Test data')
+        except ImportError:
+            # Skip verification if netCDF4 not available
+            pass
+    
+    def test_save_topography_basic(self):
+        """Test basic save of topography data."""
+        Y, X = 10, 15
+        topo_data = 1000.0 + np.random.randn(Y, X) * 100.0
+        x2f = np.linspace(-5000., 5000., Y)
+        x3f = np.linspace(-7500., 7500., X)
+        
+        metadata = {
+            'source': 'Test topography',
+            'region': 'Test region',
+        }
+        
+        filename = os.path.join(self.temp_dir, 'test_topography.nc')
+        
+        # Save data
+        save_topography_to_netcdf(filename, topo_data, x2f, x3f, metadata)
+        
+        # Verify file was created
+        self.assertTrue(os.path.exists(filename))
+        
+        # Try to load and verify
+        try:
+            from netCDF4 import Dataset
+            with Dataset(filename, 'r') as ncfile:
+                # Check dimensions
+                self.assertEqual(len(ncfile.dimensions['x2']), Y)
+                self.assertEqual(len(ncfile.dimensions['x3']), X)
+                
+                # Check variables
+                self.assertIn('topography', ncfile.variables)
+                self.assertEqual(ncfile.variables['topography'].units, 'meters')
+                
+                # Check global attributes
+                self.assertIn('history', ncfile.ncattrs())
+                self.assertEqual(ncfile.source, 'Test topography')
+        except ImportError:
+            pass
+    
+    def test_save_with_processing_history(self):
+        """Test save with custom processing history."""
+        T, Z, Y, X = 2, 3, 4, 5
+        variables = {'temperature': np.ones((T, Z, Y, X)) * 280.0}
+        coordinates = {
+            'time': np.arange(T, dtype=float),
+            'x1f': np.linspace(0., 1000., Z),
+            'x2f': np.linspace(-500., 500., Y),
+            'x3f': np.linspace(-750., 750., X),
+        }
+        
+        processing_history = "2024-01-01: Regridded from ERA5 data using custom pipeline"
+        
+        filename = os.path.join(self.temp_dir, 'test_history.nc')
+        save_regridded_data_to_netcdf(
+            filename, variables, coordinates, processing_history=processing_history
+        )
+        
+        self.assertTrue(os.path.exists(filename))
+        
+        try:
+            from netCDF4 import Dataset
+            with Dataset(filename, 'r') as ncfile:
+                self.assertEqual(ncfile.history, processing_history)
+        except ImportError:
+            pass
+
+
 def run_tests():
     """Run all tests."""
     # Create test suite
@@ -343,6 +493,7 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestHorizontalRegridXy))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridPressureToHeight))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridTopography))
+    suite.addTests(loader.loadTestsFromTestCase(TestSaveToNetCDF))
     
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)
