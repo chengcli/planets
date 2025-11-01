@@ -33,7 +33,7 @@ To use this API, you need a free CDS API key:
 
 1. **Register**: Create an account at [https://cds.climate.copernicus.eu/](https://cds.climate.copernicus.eu/)
 
-2. **Get API Key**: Find your API key at [https://cds.climate.copernicus.eu/user](https://cds.climate.copernicus.eu/user)
+2. **Following instructions**: Follow the instructions to set up your API key at [https://cds.climate.copernicus.eu/how-to-api](https://cds.climate.copernicus.eu/how-to-api)
 
 3. **Configure Authentication** (choose one method):
 
@@ -46,11 +46,17 @@ To use this API, you need a free CDS API key:
    
    Create `~/.cdsapirc` with:
    ```
-   url: https://cds.climate.copernicus.eu/api/v2
+   url: https://cds.climate.copernicus.eu/api
    key: your-uid:your-api-key
    ```
 
 ## Quick Start
+
+### ECMWF/CDS Licenses
+
+ECMWF/CDS requires users to agree to their terms of use for each data product. If some
+API requests fail, an error message will prompt you to log in to the CDS website and accept the license.
+Look for the URL in the error message to find the relevant license page and accept the terms.
 
 ### Basic Usage
 
@@ -86,6 +92,12 @@ print(f"Coordinates: {data['coordinates'].keys()}")
 # Provide API key directly
 api = ECMWFWeatherAPI(api_key="your-uid:your-api-key")
 ```
+
+### Monitor Download Progress
+
+You can go to the CDS webportal to monitor the status of your data requests:
+
+[https://cds.climate.copernicus.eu/requests](https://cds.climate.copernicus.eu/requests)
 
 ## API Reference
 

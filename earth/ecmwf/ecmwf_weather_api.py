@@ -12,7 +12,7 @@ Requirements:
 Usage:
     from ecmwf_weather_api import ECMWFWeatherAPI
     
-    api = ECMWFWeatherAPI(api_key="your-api-key", api_url="https://cds.climate.copernicus.eu/api/v2")
+    api = ECMWFWeatherAPI(api_key="your-api-key", api_url="https://cds.climate.copernicus.eu/api")
     
     data = api.fetch_weather_data(
         latmin=30.0, latmax=40.0,
@@ -48,6 +48,8 @@ try:
 except ImportError:
     XARRAY_AVAILABLE = False
 
+# ECMWF API endpoints
+ECMWF_CDS_API_URL = "https://cds.climate.copernicus.eu/api"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -104,7 +106,7 @@ class ECMWFWeatherAPI:
         
         # Configure API credentials
         self.api_key = api_key or os.environ.get('CDSAPI_KEY')
-        self.api_url = api_url or os.environ.get('CDSAPI_URL', 'https://cds.climate.copernicus.eu/api/v2')
+        self.api_url = api_url or os.environ.get('CDSAPI_URL', ECMWF_CDS_API_URL)
         
         # Initialize CDS client
         if self.api_key:
