@@ -8,7 +8,7 @@ and making real API calls.
 """
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 import tempfile
 import os
 import sys
