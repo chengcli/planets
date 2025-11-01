@@ -516,24 +516,77 @@ def regrid_txyz_from_txyp(
 
 
 # --------------------------
-# Example usage (skeleton):
+# Example usage:
 # --------------------------
+# 
+# Example 1: Complete ECMWF ERA5 regridding pipeline
+# ---------------------------------------------------
+# from regrid import regrid_pressure_to_height, regrid_topography
+# 
+# # Input data dimensions
+# T, P, Lat, Lon = 10, 8, 40, 60
+# 
+# # Input grids (ECMWF ERA5 format)
+# plev = np.array([100000., 92500., 85000., 70000., 50000., 30000., 20000., 10000.])  # Pa
+# lats = np.linspace(30.0, 35.0, Lat)   # degrees
+# lons = np.linspace(-110.0, -105.0, Lon)  # degrees
+# 
+# # Input data (T, P, Lat, Lon)
+# temp_tpll = ...  # Temperature data
+# rho_tpll = ...   # Density data
+# topo_ll = ...    # Topographic elevation (Lat, Lon)
+# 
+# # Output grids (distance in meters)
+# x1f = np.linspace(0., 10000., 50)      # Height: 0-10 km
+# x2f = np.linspace(-20000., 20000., 80)  # Y-coordinate: ±20 km
+# x3f = np.linspace(-30000., 30000., 100) # X-coordinate: ±30 km
+# 
+# # Constants
+# planet_grav = 9.81      # m/s^2
+# planet_radius = 6371.e3  # Earth radius in meters
+# 
+# # Regrid atmospheric variables
+# temp_tzyx = regrid_pressure_to_height(
+#     temp_tpll, rho_tpll, topo_ll,
+#     plev, lats, lons,
+#     x1f, x2f, x3f,
+#     planet_grav, planet_radius,
+#     bounds_error=True  # Raise error if extrapolation would occur
+# )
+# # Output shape: (T, len(x1f), len(x2f), len(x3f))
+# 
+# # Regrid topography
+# topo_yx = regrid_topography(
+#     topo_ll, lats, lons,
+#     x2f, x3f, planet_radius,
+#     bounds_error=True
+# )
+# # Output shape: (len(x2f), len(x3f))
+# 
+# 
+# Example 2: Legacy format (for backward compatibility)
+# ------------------------------------------------------
+# from regrid import compute_z_from_p, regrid_txyz_from_txyp
+# 
 # T, X, Y, P = 4, 50, 60, 30
 # t = np.arange(T)
 # x = np.linspace(-10.0, 10.0, X)
 # y = np.linspace(30.0, 50.0, Y)
 # p = np.linspace(100000.0, 10000.0, P)  # 1000→100 hPa, descending = bottom→top
-#
-# # Fake inputs
+# 
+# # Fake inputs (T, X, Y, P) format
 # rho = 1.2 + 0.1*np.random.rand(T, X, Y, P)         # kg/m^3
 # var = np.random.rand(T, X, Y, P)                   # some variable on p-levels
-#
+# 
+# # Compute heights
+# z_txyp = compute_z_from_p(p, rho, grav=9.80665)
+# 
 # # Target grids
 # x_out = np.linspace(-9.5, 9.5, 64)
 # y_out = np.linspace(30.5, 49.5, 72)
 # z_out = np.linspace(0.0, 15000.0, 40)              # 0–15 km
-#
-# data_txyz, t_o, x_o, y_o, z_o = regrid_txyz_from_txyp(
-#     var, rho, t, x, y, p, x_out, y_out, z_out, g=9.80665
+# 
+# data_txyz = regrid_txyz_from_txyp(
+#     var, z_txyp, (t, x, y, p), (x_out, y_out, z_out), grav=9.80665
 # )
 
