@@ -228,7 +228,7 @@ def horizontal_regrid_xy(
 ) -> np.ndarray:
     """
     Regrid a 2D field f(x,y) defined on 1D grids x,y to a new regular grid x_out,y_out
-    using SciPy RegularGridInterpolator (cubic).
+    using SciPy RegularGridInterpolator (cubic or linear depending on grid size).
 
     Args:
         x: (X,) input x-coordinate
@@ -254,9 +254,14 @@ def horizontal_regrid_xy(
                 f"input y range [{y.min():.2f}, {y.max():.2f}]. Extrapolation is not allowed."
             )
 
+    # Choose interpolation method based on grid size and data quality
+    # Cubic requires at least 4 points per dimension and no NaN values
+    has_nan = np.any(np.isnan(field))
+    method = "cubic" if (len(x) >= 4 and len(y) >= 4 and not has_nan) else "linear"
+    
     interp = RegularGridInterpolator((x, y),
                                      field,
-                                     method="cubic",
+                                     method=method,
                                      bounds_error=False, 
                                      fill_value=np.nan)
 
@@ -265,7 +270,7 @@ def horizontal_regrid_xy(
     Fo = interp(pts).reshape(Xo.shape)
     
     # Check if any NaNs were introduced (indicating out of bounds)
-    if bounds_error and np.any(np.isnan(Fo)):
+    if bounds_error and np.any(np.isnan(Fo)) and not np.any(np.isnan(field)):
         raise ValueError("Interpolation resulted in NaN values, indicating extrapolation occurred.")
     
     return Fo
@@ -384,6 +389,11 @@ def regrid_pressure_to_height(
     for ti in range(T):
         for zi in range(Z):
             slab = var_tllz[ti, :, :, zi]  # (Lat, Lon)
+            
+            # Skip if the slab is all NaNs (e.g., height level above all data)
+            if np.all(np.isnan(slab)):
+                continue
+            
             # Note: horizontal_regrid_xy expects (X, Y) order, so we transpose
             slab_t = slab.T  # (Lon, Lat) -> (X, Y) ordering
             var_tzyx[ti, zi, :, :] = horizontal_regrid_xy(
