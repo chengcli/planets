@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -189,7 +189,7 @@ def latlon_to_xy(
     lats: np.ndarray,   # (Lat,) latitude [degrees]
     lons: np.ndarray,   # (Lon,) longitude [degrees]
     planet_radius: float,  # planet radius [m]
-    lat_center: float = None,  # center latitude for projection [degrees]
+    lat_center: Optional[float] = None,  # center latitude for projection [degrees]
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Convert latitude/longitude to local Cartesian coordinates (Y, X) in meters.
@@ -256,8 +256,13 @@ def horizontal_regrid_xy(
 
     # Choose interpolation method based on grid size and data quality
     # Cubic requires at least 4 points per dimension and no NaN values
-    has_nan = np.any(np.isnan(field))
-    method = "cubic" if (len(x) >= 4 and len(y) >= 4 and not has_nan) else "linear"
+    # Note: We check for NaN only if cubic is feasible to avoid unnecessary full array scans
+    method = "linear"  # Default to linear
+    if len(x) >= 4 and len(y) >= 4:
+        # Only check for NaN if we might use cubic interpolation
+        has_nan = np.any(np.isnan(field))
+        if not has_nan:
+            method = "cubic"
     
     interp = RegularGridInterpolator((x, y),
                                      field,
@@ -269,9 +274,13 @@ def horizontal_regrid_xy(
     pts = np.stack([Xo.ravel(), Yo.ravel()], axis=-1)
     Fo = interp(pts).reshape(Xo.shape)
     
-    # Check if any NaNs were introduced (indicating out of bounds)
-    if bounds_error and np.any(np.isnan(Fo)) and not np.any(np.isnan(field)):
-        raise ValueError("Interpolation resulted in NaN values, indicating extrapolation occurred.")
+    # Check if any NaNs were introduced by extrapolation (not by input NaNs)
+    # Only perform this check if bounds_error is True to avoid unnecessary computation
+    if bounds_error:
+        input_has_nan = np.any(np.isnan(field))
+        output_has_nan = np.any(np.isnan(Fo))
+        if output_has_nan and not input_has_nan:
+            raise ValueError("Interpolation resulted in NaN values, indicating extrapolation occurred.")
     
     return Fo
 
@@ -381,6 +390,11 @@ def regrid_pressure_to_height(
             )
     
     # Step 6: Horizontal interpolation for each time and height level
+    # NOTE: These loops could potentially be vectorized or parallelized for large datasets.
+    # However, RegularGridInterpolator needs to be instantiated per slice due to
+    # varying NaN patterns at different heights. For typical ERA5 datasets, the
+    # performance is acceptable. Future optimization could use multiprocessing
+    # or joblib for parallel processing of time/height slices.
     Z = len(x1f)
     Y_out = len(x2f)
     X_out = len(x3f)
