@@ -8,7 +8,6 @@ fetch_era5_hourly_dynamics.py scripts.
 import unittest
 import sys
 import os
-import tempfile
 from unittest.mock import MagicMock, patch, Mock
 import argparse
 
