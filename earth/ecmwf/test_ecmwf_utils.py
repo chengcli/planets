@@ -9,7 +9,7 @@ import sys
 import os
 import tempfile
 import shutil
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))
