@@ -29,6 +29,11 @@ import logging
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 import tempfile
+from ecmwf_utils import (
+        validate_region_bounds, 
+        validate_pressure_levels,
+        validate_variable_names
+        )
 
 try:
     import cdsapi
@@ -55,7 +60,6 @@ ECMWF_CDS_API_URL = "https://cds.climate.copernicus.eu/api"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 class ECMWFWeatherAPI:
     """
     API for fetching and processing ECMWF ERA5 weather data.
@@ -64,27 +68,6 @@ class ECMWFWeatherAPI:
     ECMWF Climate Data Store (CDS) given geographical bounds, atmospheric
     variables, and a time window.
     """
-    
-    # Mapping of common variable names to ECMWF ERA5 names
-    VARIABLE_MAPPING = {
-        'temperature': 'temperature',
-        'temp': 'temperature',
-        'u_wind': 'u_component_of_wind',
-        'u': 'u_component_of_wind',
-        'v_wind': 'v_component_of_wind',
-        'v': 'v_component_of_wind',
-        'geopotential': 'geopotential',
-        'relative_humidity': 'relative_humidity',
-        'humidity': 'relative_humidity',
-        'specific_humidity': 'specific_humidity',
-    }
-    
-    # Standard pressure levels available in ERA5 (hPa)
-    STANDARD_PRESSURE_LEVELS = [
-        1, 2, 3, 5, 7, 10, 20, 30, 50, 70, 100, 125, 150, 175, 200,
-        225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750,
-        775, 800, 825, 850, 875, 900, 925, 950, 975, 1000
-    ]
     
     def __init__(self, api_key: Optional[str] = None, api_url: Optional[str] = None):
         """
@@ -125,68 +108,6 @@ class ECMWFWeatherAPI:
         
         logger.info("ECMWF Weather API initialized successfully")
     
-    def _normalize_variable_names(self, variables: List[str]) -> List[str]:
-        """
-        Normalize variable names to ECMWF ERA5 format.
-        
-        Args:
-            variables: List of variable names (can be aliases).
-        
-        Returns:
-            List of normalized ECMWF variable names.
-        """
-        normalized = []
-        for var in variables:
-            normalized_var = self.VARIABLE_MAPPING.get(var.lower(), var)
-            normalized.append(normalized_var)
-        return normalized
-    
-    def _validate_bounds(self, latmin: float, latmax: float, 
-                        lonmin: float, lonmax: float) -> None:
-        """
-        Validate geographical bounds.
-        
-        Args:
-            latmin: Minimum latitude (-90 to 90).
-            latmax: Maximum latitude (-90 to 90).
-            lonmin: Minimum longitude (-180 to 180).
-            lonmax: Maximum longitude (-180 to 180).
-        
-        Raises:
-            ValueError: If bounds are invalid.
-        """
-        if not (-90 <= latmin <= 90) or not (-90 <= latmax <= 90):
-            raise ValueError(f"Latitude must be between -90 and 90. Got: {latmin}, {latmax}")
-        
-        if latmin >= latmax:
-            raise ValueError(f"latmin must be less than latmax. Got: {latmin} >= {latmax}")
-        
-        if not (-180 <= lonmin <= 180) or not (-180 <= lonmax <= 180):
-            raise ValueError(f"Longitude must be between -180 and 180. Got: {lonmin}, {lonmax}")
-        
-        if lonmin >= lonmax:
-            raise ValueError(f"lonmin must be less than lonmax. Got: {lonmin} >= {lonmax}")
-    
-    def _validate_pressure_levels(self, pressure_levels: List[int]) -> List[str]:
-        """
-        Validate pressure levels and convert to strings.
-        
-        Args:
-            pressure_levels: List of pressure levels in hPa.
-        
-        Returns:
-            List of pressure levels as strings.
-        
-        Raises:
-            ValueError: If pressure levels are invalid.
-        """
-        for level in pressure_levels:
-            if level not in self.STANDARD_PRESSURE_LEVELS:
-                raise ValueError(
-                    f"Pressure level {level} hPa is not available. "
-                    f"Available levels: {self.STANDARD_PRESSURE_LEVELS}"
-                )
-        return [str(level) for level in pressure_levels]
     
     def _parse_date_range(self, start_date: str, end_date: str) -> Tuple[List[str], List[str], List[str]]:
         """
@@ -271,16 +192,20 @@ class ECMWFWeatherAPI:
         """
         logger.info("Starting ECMWF weather data fetch")
         
-        # Validate inputs
-        self._validate_bounds(latmin, latmax, lonmin, lonmax)
+        # Validate region bounds
+        validate_region_bounds(latmin, latmax, lonmin, lonmax)
         
         # Set default pressure levels if not provided
         if pressure_levels is None:
             pressure_levels = [1000, 925, 850, 700, 500, 300, 200]
         
         # Validate and normalize inputs
-        pressure_level_strs = self._validate_pressure_levels(pressure_levels)
-        variables = self._normalize_variable_names(variables)
+        pressure_level_strs = validate_pressure_levels(pressure_levels)
+
+        # Validate variable names
+        validate_variable_names(variables)
+
+        # Parse date range
         years, months, days = self._parse_date_range(start_date, end_date)
         
         # Set default times if not provided (every 6 hours)
@@ -329,7 +254,7 @@ class ECMWFWeatherAPI:
             if request_id:
                 logger.info(f"Request ID: {request_id}")
             
-            return (output_file, request_id)
+            return output_file
         
         except Exception as e:
             logger.error(f"Failed to fetch weather data: {e}")

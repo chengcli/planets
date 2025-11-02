@@ -69,69 +69,6 @@ class TestECMWFWeatherAPI(unittest.TestCase):
                     # Skip this test or mark as expected behavior
                     self.skipTest("Complex mocking required for this test")
     
-    def test_normalize_variable_names(self):
-        """Test variable name normalization."""
-        api = ECMWFWeatherAPI(api_key="test-key")
-        
-        # Test known aliases
-        variables = ['temperature', 'temp', 'u', 'v_wind', 'humidity']
-        normalized = api._normalize_variable_names(variables)
-        
-        expected = [
-            'temperature',
-            'temperature',
-            'u_component_of_wind',
-            'v_component_of_wind',
-            'relative_humidity'
-        ]
-        
-        self.assertEqual(normalized, expected)
-    
-    def test_validate_bounds_valid(self):
-        """Test validation of valid geographical bounds."""
-        api = ECMWFWeatherAPI(api_key="test-key")
-        
-        # Should not raise any exception
-        api._validate_bounds(30.0, 40.0, -110.0, -100.0)
-    
-    def test_validate_bounds_invalid_latitude(self):
-        """Test validation catches invalid latitude."""
-        api = ECMWFWeatherAPI(api_key="test-key")
-        
-        with self.assertRaises(ValueError) as context:
-            api._validate_bounds(-100.0, 40.0, -110.0, -100.0)
-        
-        self.assertIn("Latitude must be between -90 and 90", str(context.exception))
-    
-    def test_validate_bounds_invalid_order(self):
-        """Test validation catches reversed bounds."""
-        api = ECMWFWeatherAPI(api_key="test-key")
-        
-        with self.assertRaises(ValueError) as context:
-            api._validate_bounds(40.0, 30.0, -110.0, -100.0)
-        
-        self.assertIn("latmin must be less than latmax", str(context.exception))
-    
-    def test_validate_pressure_levels_valid(self):
-        """Test validation of valid pressure levels."""
-        api = ECMWFWeatherAPI(api_key="test-key")
-        
-        levels = [1000, 925, 850, 700, 500]
-        result = api._validate_pressure_levels(levels)
-        
-        self.assertEqual(result, ['1000', '925', '850', '700', '500'])
-    
-    def test_validate_pressure_levels_invalid(self):
-        """Test validation catches invalid pressure levels."""
-        api = ECMWFWeatherAPI(api_key="test-key")
-        
-        levels = [1000, 999]  # 999 is not a standard level
-        
-        with self.assertRaises(ValueError) as context:
-            api._validate_pressure_levels(levels)
-        
-        self.assertIn("not available", str(context.exception))
-    
     def test_parse_date_range(self):
         """Test date range parsing."""
         api = ECMWFWeatherAPI(api_key="test-key")
@@ -201,14 +138,14 @@ class TestECMWFWeatherAPI(unittest.TestCase):
             output_file = tmp.name
         
         try:
-            result_file, request_id = api.fetch_weather_data(
+            result_file = api.fetch_weather_data(
                 latmin=30.0,
                 latmax=40.0,
                 lonmin=-110.0,
                 lonmax=-100.0,
                 start_date="2024-01-01",
                 end_date="2024-01-02",
-                variables=["temperature", "u_wind"],
+                variables=["temperature", "u_component_of_wind"],
                 pressure_levels=[1000, 850, 500],
                 output_file=output_file
             )
