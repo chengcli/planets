@@ -41,6 +41,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from regrid import (
     compute_height_grid,
     regrid_multiple_variables,
+    regrid_pressure_to_height,
     save_regridded_data_to_netcdf,
 )
 
@@ -333,16 +334,16 @@ def load_era5_data(file_paths: Dict[str, str]) -> Tuple:
     ds_density = xr.open_dataset(file_paths['density'])
     
     # Extract coordinates
-    # ERA5 uses 'time', 'level' (pressure in Pa or hPa), 'latitude', 'longitude'
+    # ERA5 uses 'time', 'pressure_level' (pressure in Pa or hPa), 'latitude', 'longitude'
     # Different files might use slightly different naming conventions
     
     # Time coordinate
     time_var = 'time' if 'time' in ds_dynamics.coords else 'valid_time'
     time = ds_dynamics[time_var].values
     
-    # Pressure levels - might be 'level', 'plev', or 'pressure'
-    if 'level' in ds_dynamics.coords:
-        plev = ds_dynamics['level'].values
+    # Pressure levels - might be 'pressure_level', 'plev', or 'pressure'
+    if 'pressure_level' in ds_dynamics.coords:
+        plev = ds_dynamics['pressure_level'].values
     elif 'plev' in ds_dynamics.coords:
         plev = ds_dynamics['plev'].values
     elif 'pressure' in ds_dynamics.coords:
