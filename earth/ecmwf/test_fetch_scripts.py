@@ -9,7 +9,6 @@ import unittest
 import sys
 import os
 import tempfile
-import shutil
 from unittest.mock import MagicMock, patch, Mock
 import argparse
 
