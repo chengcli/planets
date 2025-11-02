@@ -21,11 +21,13 @@ The ECMWF Weather API provides a Python interface to:
 ### Convenience Scripts
 - `fetch_era5_hourly_dynamics.py`: Download dynamics variables (wind, temperature, etc.)
 - `fetch_era5_hourly_densities.py`: Download density variables (humidity, cloud content, etc.)
-- `fetch_era5_pipeline.py`: End-to-end pipeline to fetch ERA5 data from YAML configuration
+- `fetch_era5_pipeline.py`: End-to-end pipeline to fetch ERA5 data from YAML configuration (Step 1)
+- `calculate_density.py`: Calculate total air density from downloaded data (Step 2)
 
 ### Examples
 - `example_ecmwf_usage.py`: Demonstrates various API usage patterns
 - `example_regrid.py`: Shows how to regrid downloaded data
+- `example_calculate_density.py`: Demonstrates air density calculation
 
 ### Tests
 - `test_ecmwf_weather_api.py`: Tests for main API functionality
@@ -33,6 +35,7 @@ The ECMWF Weather API provides a Python interface to:
 - `test_fetch_scripts.py`: Tests for convenience scripts
 - `test_fetch_era5_pipeline.py`: Tests for the YAML configuration pipeline
 - `test_regrid.py`: Tests for regridding functions
+- `test_calculate_density.py`: Tests for density calculation
 
 ### Configuration
 - `requirements.txt`: Python package dependencies
@@ -610,6 +613,184 @@ The test suite covers:
 - Buffer zone addition
 - Directory naming conventions
 - Error handling
+
+## Data Curation Pipeline - Step 2: Calculate Air Density
+
+After downloading ERA5 data using the pipeline (Step 1), you can calculate the total air density from the dynamics and density variables using `calculate_density.py`.
+
+### Theory
+
+The script solves three linear equations to determine the density components:
+
+1. **Ideal gas law**: `rho_d / m_d + rho_v / m_v = P / (Rgas * T)`
+2. **Water vapor fraction**: `rho_v = q * (rho_d + rho_v + rho_c)`
+3. **Cloud fraction**: `rho_c = (ciwc + cswc + clwc + crwc) * (rho_d + rho_v + rho_c)`
+
+Where:
+- `rho_d`: Dry air density (kg/m³)
+- `rho_v`: Water vapor density (kg/m³)
+- `rho_c`: Cloud density (kg/m³)
+- `P`: Total pressure (Pa)
+- `T`: Temperature (K)
+- `Rgas`: Ideal gas constant = 8.31446 J/(mol·K)
+- `m_d`: Molecular weight of dry air = 28.96e-3 kg/mol
+- `m_v`: Molecular weight of water vapor = 18.0e-3 kg/mol
+- `q`: Specific humidity (dimensionless)
+- `ciwc, cswc, clwc, crwc`: Cloud ice, snow, liquid, and rain water content
+
+The total air density is: `rho = rho_d + rho_v + rho_c`
+
+### Usage
+
+The script supports two modes:
+
+#### Single File Mode
+
+Process a single pair of dynamics and densities files:
+
+```bash
+python calculate_density.py \
+    --dynamics-file era5_hourly_dynamics_20240101.nc \
+    --densities-file era5_hourly_densities_20240101.nc \
+    --output era5_density_20240101.nc
+```
+
+#### Batch Directory Mode
+
+Process all matching file pairs in a directory:
+
+```bash
+python calculate_density.py \
+    --input-dir ./29.19N_30.81N_110.93W_109.07W \
+    --output-dir ./densities
+```
+
+This will automatically find all matching pairs:
+- `era5_hourly_dynamics_YYYYMMDD.nc`
+- `era5_hourly_densities_YYYYMMDD.nc`
+
+And create output files:
+- `era5_density_YYYYMMDD.nc`
+
+### Output Format
+
+The output NetCDF file contains:
+
+**Variables:**
+- `rho`: Total air density (kg/m³)
+- `rho_d`: Dry air density component (kg/m³)
+- `rho_v`: Water vapor density component (kg/m³)
+- `rho_c`: Cloud density component (kg/m³)
+
+**Coordinates:**
+- `time`: Time dimension
+- `level`: Pressure levels (hPa)
+- `latitude`: Latitude (degrees_north)
+- `longitude`: Longitude (degrees_east)
+
+**Metadata:**
+- Physical constants used in calculations
+- CF-1.8 conventions compliance
+- Calculation method and references
+
+### Complete Pipeline Example
+
+Here's a complete workflow from YAML configuration to density calculation:
+
+```bash
+# Step 1: Fetch ERA5 data using YAML configuration
+python fetch_era5_pipeline.py earth.yaml
+
+# This creates a directory like: 29.19N_30.81N_110.93W_109.07W/
+# with files: era5_hourly_dynamics_*.nc and era5_hourly_densities_*.nc
+
+# Step 2: Calculate air density for all downloaded data
+python calculate_density.py \
+    --input-dir ./29.19N_30.81N_110.93W_109.07W \
+    --output-dir ./densities
+
+# Output directory now contains: era5_density_YYYYMMDD.nc files
+```
+
+### Python API
+
+You can also use the calculation functions directly in Python:
+
+```python
+from calculate_density import (
+    load_netcdf_data,
+    calculate_total_density,
+    save_density_netcdf,
+    solve_density_equations
+)
+
+# Load data
+data = load_netcdf_data('dynamics.nc', 'densities.nc')
+
+# Calculate density
+rho_total, rho_d, rho_v, rho_c, pressure = calculate_total_density(data)
+
+# Save results
+save_density_netcdf('output.nc', data, rho_total, rho_d, rho_v, rho_c)
+
+# Or use the equation solver directly with your own arrays
+import numpy as np
+temperature = np.array([...])  # K
+pressure_pa = np.array([...])  # Pa
+q = np.array([...])            # specific humidity
+cloud_content = np.array([...])  # total cloud content
+
+rho_total, rho_d, rho_v, rho_c = solve_density_equations(
+    temperature, pressure_pa, q, cloud_content
+)
+```
+
+### Examples
+
+Run the example script to see various usage patterns:
+
+```bash
+python example_calculate_density.py
+```
+
+The example demonstrates:
+1. Single file processing
+2. Batch directory processing
+3. Custom processing with intermediate access
+4. Direct calculation with synthetic data
+
+### Testing
+
+Run the density calculation tests:
+
+```bash
+python test_calculate_density.py
+```
+
+The test suite covers:
+- Physical constants validation
+- Density equation solver correctness
+- Data loading from NetCDF files
+- NetCDF output generation
+- Command-line interface
+- Error handling
+- Edge cases and extreme values
+
+### Requirements
+
+The density calculation requires:
+- NumPy (numerical operations)
+- netCDF4 (file I/O)
+
+Install with:
+```bash
+pip install numpy netCDF4
+```
+
+Or use the main requirements file:
+```bash
+pip install -r requirements.txt
+```
 
 ## License
 
