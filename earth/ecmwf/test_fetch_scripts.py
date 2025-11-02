@@ -8,7 +8,7 @@ fetch_era5_hourly_dynamics.py scripts.
 import unittest
 import sys
 import os
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock, patch
 import argparse
 
 # Add current directory to path
