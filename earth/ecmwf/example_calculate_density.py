@@ -19,7 +19,6 @@ Usage:
 
 import os
 import sys
-import tempfile
 
 # Add current directory to path for importing local modules
 sys.path.insert(0, os.path.dirname(__file__))

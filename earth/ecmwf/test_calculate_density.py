@@ -7,10 +7,10 @@ This module contains tests for the density calculation script.
 import unittest
 import sys
 import os
-import tempfile
 import shutil
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 import warnings
+import tempfile
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))

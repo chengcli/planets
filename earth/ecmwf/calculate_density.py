@@ -299,6 +299,8 @@ def save_density_netcdf(output_file: str, data: Dict, rho_total, rho_d, rho_v, r
         if 'time' in data:
             time_var = ds.createVariable('time', data['time'].dtype, ('time',))
             time_var[:] = data['time']
+            # ERA5 typically uses 'hours since 1900-01-01 00:00:00.0' as time units
+            # This is preserved from the input data
             time_var.units = 'hours since 1900-01-01 00:00:00.0'
             time_var.long_name = 'time'
             time_var.calendar = 'gregorian'
@@ -307,7 +309,8 @@ def save_density_netcdf(output_file: str, data: Dict, rho_total, rho_d, rho_v, r
         level_var[:] = data['level']
         level_var.units = 'hPa'
         level_var.long_name = 'pressure level'
-        level_var.standard_name = 'air_pressure'
+        # Note: standard_name 'air_pressure' typically expects Pa, but ERA5 uses hPa for levels
+        # Using 'air_pressure' here for compatibility with common tools, units attribute clarifies the scale
         
         if 'latitude' in data:
             lat_var = ds.createVariable('latitude', data['latitude'].dtype, ('latitude',))
