@@ -10,6 +10,7 @@ import sys
 import os
 import tempfile
 import yaml
+import subprocess
 from unittest.mock import MagicMock, patch, call
 import math
 
@@ -509,9 +510,6 @@ integration:
         except SystemExit as e:
             # main() might call sys.exit(0) on success
             self.assertEqual(e.code, 0)
-
-
-import subprocess
 
 
 def run_tests():
