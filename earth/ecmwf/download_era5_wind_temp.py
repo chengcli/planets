@@ -5,7 +5,7 @@ Convenient script to download temperature, u-wind, and v-wind from ERA5.
 This script downloads temperature, u-component of wind, and v-component of wind
 at all standard ERA5 pressure levels for a specified region and time period.
 
-The download is split into separate jobs - one per pressure level - which can
+The download is split into separate jobs - one per day - which can
 run in parallel for faster data retrieval. Once all jobs complete, the data
 is combined into a single NetCDF file.
 
@@ -26,7 +26,7 @@ import sys
 import os
 import tempfile
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add current directory to path for importing local module
@@ -89,7 +89,7 @@ Note: Download may take several minutes depending on request size and CDS server
                              'Default: all available times (every 6 hours)')
     parser.add_argument('--jobs', type=int, default=4,
                         help='Number of parallel download jobs (default: 4). '
-                             'Each job downloads one pressure level.')
+                             'Each job downloads one day.')
     parser.add_argument('--api-key', type=str, default=None,
                         help='CDS API key (if not using environment variable or ~/.cdsapirc)')
     parser.add_argument('--api-url', type=str, default=None,
@@ -107,57 +107,80 @@ def validate_date_format(date_str):
         return False
 
 
-def download_single_level(api, level, variables, latmin, latmax, lonmin, lonmax,
-                          start_date, end_date, times, temp_dir, level_idx, total_levels):
+def generate_date_list(start_date, end_date):
     """
-    Download data for a single pressure level.
+    Generate list of dates from start_date to end_date (inclusive).
+    
+    Args:
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+    
+    Returns:
+        List of date strings in YYYY-MM-DD format
+    """
+    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+    
+    dates = []
+    current = start_dt
+    while current <= end_dt:
+        dates.append(current.strftime('%Y-%m-%d'))
+        current += timedelta(days=1)
+    
+    return dates
+
+
+def download_single_day(api, date_str, variables, pressure_levels, latmin, latmax, 
+                        lonmin, lonmax, times, temp_dir, day_idx, total_days):
+    """
+    Download data for a single day.
     
     Args:
         api: ECMWFWeatherAPI instance
-        level: Pressure level in hPa
+        date_str: Date in YYYY-MM-DD format
         variables: List of variable names
+        pressure_levels: List of pressure levels in hPa
         latmin, latmax, lonmin, lonmax: Geographic bounds
-        start_date, end_date: Date range
         times: List of times
         temp_dir: Temporary directory for storing individual files
-        level_idx: Index of this level (for progress tracking)
-        total_levels: Total number of levels
+        day_idx: Index of this day (for progress tracking)
+        total_days: Total number of days
     
     Returns:
-        Tuple of (level, output_file_path) or (level, None) on error
+        Tuple of (date_str, output_file_path) or (date_str, None) on error
     """
     try:
-        output_file = os.path.join(temp_dir, f'level_{level:04d}hPa.nc')
+        output_file = os.path.join(temp_dir, f'day_{date_str}.nc')
         
-        print(f"[{level_idx+1}/{total_levels}] Downloading {level} hPa...")
+        print(f"[{day_idx+1}/{total_days}] Downloading {date_str}...")
         
         api.fetch_weather_data(
             latmin=latmin,
             latmax=latmax,
             lonmin=lonmin,
             lonmax=lonmax,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=date_str,
+            end_date=date_str,
             variables=variables,
-            pressure_levels=[level],
+            pressure_levels=pressure_levels,
             output_file=output_file,
             times=times
         )
         
-        print(f"[{level_idx+1}/{total_levels}] ✓ Completed {level} hPa")
-        return (level, output_file)
+        print(f"[{day_idx+1}/{total_days}] ✓ Completed {date_str}")
+        return (date_str, output_file)
     
     except Exception as e:
-        print(f"[{level_idx+1}/{total_levels}] ✗ Failed {level} hPa: {e}")
-        return (level, None)
+        print(f"[{day_idx+1}/{total_days}] ✗ Failed {date_str}: {e}")
+        return (date_str, None)
 
 
 def combine_netcdf_files(file_list, output_file):
     """
-    Combine multiple NetCDF files (one per pressure level) into a single file.
+    Combine multiple NetCDF files (one per day) into a single file.
     
     Args:
-        file_list: List of tuples (level, filepath)
+        file_list: List of tuples (date_str, filepath)
         output_file: Path for the combined output file
     
     Returns:
@@ -169,10 +192,10 @@ def combine_netcdf_files(file_list, output_file):
         return False
     
     try:
-        print(f"\nCombining {len(file_list)} pressure level files...")
+        print(f"\nCombining {len(file_list)} daily files...")
         
         # Filter out failed downloads
-        valid_files = [(level, path) for level, path in file_list if path is not None]
+        valid_files = [(date_str, path) for date_str, path in file_list if path is not None]
         
         if not valid_files:
             print("Error: No files to combine (all downloads failed)")
@@ -180,19 +203,19 @@ def combine_netcdf_files(file_list, output_file):
         
         if len(valid_files) < len(file_list):
             failed = len(file_list) - len(valid_files)
-            print(f"Warning: {failed} pressure level(s) failed to download")
+            print(f"Warning: {failed} day(s) failed to download")
         
         # Load all datasets
         datasets = []
-        for level, filepath in valid_files:
+        for date_str, filepath in valid_files:
             ds = xr.open_dataset(filepath)
             datasets.append(ds)
         
-        # Combine along the level dimension
-        combined_ds = xr.concat(datasets, dim='level')
+        # Combine along the time dimension
+        combined_ds = xr.concat(datasets, dim='time')
         
-        # Sort by pressure level (descending - from low pressure/high altitude to high pressure/low altitude)
-        combined_ds = combined_ds.sortby('level', ascending=False)
+        # Sort by time
+        combined_ds = combined_ds.sortby('time')
         
         # Save to output file
         combined_ds.to_netcdf(output_file)
@@ -270,33 +293,35 @@ def main():
             775, 800, 825, 850, 875, 900, 925, 950, 975, 1000
         ]
         
-        print(f"\nDownloading {len(pressure_levels)} pressure levels using {args.jobs} parallel jobs...")
-        print("(Each job downloads one pressure level. This may take several minutes.)")
+        # Generate list of dates to download
+        dates = generate_date_list(args.start_date, args.end_date)
         
-        # Create temporary directory for individual level files
+        print(f"\nDownloading {len(dates)} day(s) using {args.jobs} parallel jobs...")
+        print("(Each job downloads one day with all pressure levels. This may take several minutes.)")
+        
+        # Create temporary directory for individual day files
         temp_dir = tempfile.mkdtemp(prefix='era5_download_')
         
         try:
-            # Download each pressure level in parallel
+            # Download each day in parallel
             results = []
             with ThreadPoolExecutor(max_workers=args.jobs) as executor:
                 futures = {}
-                for idx, level in enumerate(pressure_levels):
+                for idx, date_str in enumerate(dates):
                     future = executor.submit(
-                        download_single_level,
-                        api, level, variables,
+                        download_single_day,
+                        api, date_str, variables, pressure_levels,
                         args.latmin, args.latmax, args.lonmin, args.lonmax,
-                        args.start_date, args.end_date, args.times,
-                        temp_dir, idx, len(pressure_levels)
+                        args.times, temp_dir, idx, len(dates)
                     )
-                    futures[future] = level
+                    futures[future] = date_str
                 
                 # Collect results as they complete
                 for future in as_completed(futures):
-                    level, filepath = future.result()
-                    results.append((level, filepath))
+                    date_str, filepath = future.result()
+                    results.append((date_str, filepath))
             
-            # Sort results by pressure level for consistent ordering
+            # Sort results by date for consistent ordering
             results.sort(key=lambda x: x[0])
             
             # Combine all files into one
