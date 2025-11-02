@@ -21,6 +21,7 @@ The ECMWF Weather API provides a Python interface to:
 ### Convenience Scripts
 - `fetch_era5_hourly_dynamics.py`: Download dynamics variables (wind, temperature, etc.)
 - `fetch_era5_hourly_densities.py`: Download density variables (humidity, cloud content, etc.)
+- `fetch_era5_pipeline.py`: End-to-end pipeline to fetch ERA5 data from YAML configuration
 
 ### Examples
 - `example_ecmwf_usage.py`: Demonstrates various API usage patterns
@@ -30,6 +31,7 @@ The ECMWF Weather API provides a Python interface to:
 - `test_ecmwf_weather_api.py`: Tests for main API functionality
 - `test_ecmwf_utils.py`: Tests for utility functions
 - `test_fetch_scripts.py`: Tests for convenience scripts
+- `test_fetch_era5_pipeline.py`: Tests for the YAML configuration pipeline
 - `test_regrid.py`: Tests for regridding functions
 
 ### Configuration
@@ -51,6 +53,7 @@ The API requires:
 - `xarray` - For loading and processing NetCDF data
 - `netCDF4` - NetCDF file format support
 - `numpy` - Numerical operations (optional, for data processing)
+- `PyYAML` - For parsing YAML configuration files (required for pipeline script)
 
 ### CDS API Key Setup
 
@@ -523,6 +526,90 @@ raw_data = api.load_data(data_file)
 # 4. Use with simulation
 # ... integration with white_sand_crm.py or other simulations ...
 ```
+
+## YAML Configuration Pipeline
+
+The `fetch_era5_pipeline.py` script provides an end-to-end pipeline for fetching ERA5 data based on YAML configuration files. This is particularly useful for atmospheric simulation setups where domain geometry and time period are defined in configuration files.
+
+### Pipeline Features
+
+- **Automatic domain calculation**: Converts Cartesian domain geometry to lat-lon coordinates
+- **Ghost zone handling**: Includes ghost cells in the fetch region
+- **Buffer zones**: Adds configurable buffer (default 10%) around the domain
+- **Integrated fetching**: Automatically fetches both densities and dynamics data
+- **Smart directory naming**: Creates output directories with clear geographic identifiers
+
+### Configuration File Format
+
+The pipeline expects a YAML configuration file with the following structure:
+
+```yaml
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 20.e3, x3min: 0., x3max: 10.e3}
+  cells: {nx1: 100, nx2: 300, nx3: 150, nghost: 3}
+  center_latitude: 30.
+  center_longitude: -110.
+
+integration:
+  start-date: 2024-01-01
+  end-date: 2024-01-02
+```
+
+**Coordinate system:**
+- `x1`: Z direction (vertical, in meters)
+- `x2`: Y direction (north-south, in meters)
+- `x3`: X direction (east-west, in meters)
+- `bounds`: Domain boundaries including ghost zones
+- `cells`: Grid cell configuration (nx1, nx2, nx3 are interior cells, nghost is number of ghost cells on each side)
+- `center_latitude`, `center_longitude`: Geographic center of the computational domain
+
+### Usage
+
+```bash
+python fetch_era5_pipeline.py config.yaml
+```
+
+With custom output directory:
+```bash
+python fetch_era5_pipeline.py config.yaml --output-base ./data
+```
+
+### Example Output
+
+For the example configuration above, the pipeline will:
+1. Calculate domain extent: ~20 km north-south × ~10 km east-west centered at (30°N, 110°W)
+2. Add 10% buffer zone to ensure adequate boundary data
+3. Fetch ERA5 densities and dynamics data for the region
+4. Save output in directory named: `29.89N_30.11N_110.06W_109.94W`
+
+Each output directory contains:
+- `era5_hourly_densities_YYYYMMDD.nc`: Density variables for each day
+- `era5_hourly_dynamics_YYYYMMDD.nc`: Dynamics variables for each day
+
+### Pipeline Workflow
+
+```
+YAML Config → Parse Geometry → Calculate Lat-Lon → Add Buffer → Fetch Data
+                    ↓                  ↓                ↓            ↓
+              Extract center    Convert meters    10% expansion   Densities
+              and bounds        to degrees        around domain   & Dynamics
+```
+
+### Testing
+
+Run the pipeline tests:
+```bash
+python test_fetch_era5_pipeline.py
+```
+
+The test suite covers:
+- YAML parsing and validation
+- Geometry extraction and conversion
+- Lat-lon limit calculations
+- Buffer zone addition
+- Directory naming conventions
+- Error handling
 
 ## License
 
