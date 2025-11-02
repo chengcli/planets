@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from netCDF4 import Dataset
-from regrid import (
+from ecmwf.regrid import (
         compute_z_from_p,
         regrid_txyz_from_txyp
         )

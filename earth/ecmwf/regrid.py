@@ -5,6 +5,7 @@ This module provides functions to regrid ECMWF ERA5 data from pressure-lat-lon
 grids to uniform Cartesian distance grids (height-Y-X) for atmospheric modeling.
 
 Functions:
+    compute_z_from_p: Convert pressure levels to height (T,X,Y,P ordering)
     compute_dz_from_plev: Compute layer thickness from pressure levels
     compute_heights_from_dz: Compute absolute heights from layer thickness and topography
     compute_height_grid: Compute height grid once for reuse with multiple variables
@@ -14,6 +15,7 @@ Functions:
     regrid_pressure_to_height: Complete pipeline from (T,P,Lat,Lon) to (T,Z,Y,X)
     regrid_multiple_variables: Regrid multiple variables in parallel for improved performance
     regrid_topography: Regrid topographic elevation to distance grids
+    regrid_txyz_from_txyp: Full pipeline from (T,X,Y,P) to (T,X',Y',Z')
     save_regridded_data_to_netcdf: Save regridded atmospheric data to NetCDF with metadata
     save_topography_to_netcdf: Save regridded topography to NetCDF with metadata
 """
@@ -28,6 +30,48 @@ from scipy.interpolate import RegularGridInterpolator
 # Parallelization thresholds
 _VERTICAL_INTERP_PARALLEL_THRESHOLD = 100  # Minimum columns for parallel vertical interpolation
 _HORIZONTAL_REGRID_PARALLEL_THRESHOLD = 10  # Minimum slices for parallel horizontal regridding
+
+
+def compute_z_from_p(
+    p: np.ndarray,      # (P,) pressure levels [Pa], typically decreasing with height
+    rho: np.ndarray,    # (T, X, Y, P) density [kg/m^3]
+    grav: float,        # gravity [m/s^2]
+) -> np.ndarray:
+    """
+    Convert pressure levels to geometric height at each (t,x,y) using
+    Δz = Δp / (ρ̄ g), where ρ̄ is layer-mean density (trapezoidal in 1/ρ).
+    
+    This function is compatible with the (T, X, Y, P) coordinate ordering
+    used in some atmospheric data processing workflows.
+
+    Returns:
+        z: (T, X, Y, P) height [m], with z[..., 0] = 0 at the bottom level and increasing upward.
+    """
+    # Ensure p is monotonic from bottom (largest p) to top (smallest p)
+    p = np.asarray(p)
+    if p.ndim != 1:
+        raise ValueError("p must be 1D of shape (P,).")
+    if not np.all(np.diff(p) < 0):
+        # sort descending (bottom→top)
+        order = np.argsort(-p)
+        p = p[order]
+        rho = rho[..., order]
+
+    T, X, Y, P = rho.shape
+    if p.shape[0] != P:
+        raise ValueError("rho last dimension must match p length.")
+
+    # Layer thickness Δz_k between p[k] and p[k+1]
+    # Use trapezoid rule on 1/rho:  1/ρ̄ ≈ 0.5*(1/ρ_k + 1/ρ_{k+1})
+    inv_rho = 1.0 / rho
+    inv_rho_mid = 0.5 * (inv_rho[..., :-1] + inv_rho[..., 1:]) # (T,X,Y,P-1)
+    dp = (p[:-1] - p[1:])[None, None, None, :]                 # (1,1,1,P-1), positive if p decreases upward
+    dz_layers = (dp * inv_rho_mid) / grav                      # (T,X,Y,P-1)
+
+    # z at full levels with z[...,0] = 0 (relative to bottom)
+    z = np.zeros((T, X, Y, P), dtype=rho.dtype)
+    z[..., 1:] = np.cumsum(dz_layers, axis=-1)
+    return z
 
 
 def compute_dz_from_plev(
@@ -769,6 +813,88 @@ def regrid_topography(
     ).T  # Transpose back to (Y, X)
     
     return topo_yx
+
+
+def regrid_txyz_from_txyp(
+    data_txyp: np.ndarray,  # (T, X, Y, P) variable on (t,x,y,p)
+    z_txyp: np.ndarray,     # (T, X, Y, P) height at (t,x,y,p)
+    inp_coord: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    out_coord: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    grav: float,
+    n_jobs: Optional[int] = None,  # Number of parallel workers (None = auto, 1 = sequential)
+    ) -> np.ndarray:
+    """
+    Full pipeline: (t,x,y,p) → compute z(t,x,y,p) → interpolate vertically to z'
+    → horizontally to (x',y') for each (t,z'). Both steps are parallelized.
+    
+    This function is compatible with the (T, X, Y, P) coordinate ordering
+    used in some atmospheric data processing workflows.
+
+    Args:
+        data_txyp: (T, X, Y, P) variable on (t,x,y,p)
+        z_txyp: (T, X, Y, P) height at (t,x,y,p)
+        inp_coord: Tuple of (t, x, y, p) coordinate arrays
+        out_coord: Tuple of (x_out, y_out, z_out) coordinate arrays
+        grav: Gravity constant [m/s^2]
+        n_jobs: Number of parallel workers (None=auto, 1=sequential, -1=all CPUs)
+
+    Returns:
+        data_txyz: (T, X', Y', Z') on (t, x', y', z')
+    """
+    t, x, y, p = inp_coord
+    x_out, y_out, z_out = out_coord
+
+    T, X, Y, P = data_txyp.shape
+    if z_txyp.shape != data_txyp.shape:
+        raise ValueError("z_txyp must have the same shape as data_txyp (T,X,Y,P).")
+
+    # (1) Vertical interpolation to z' per (t,x,y) column (parallelized)
+    #     Output shape: (T, X, Y, Z)
+    data_txyz_on_orig_xy = vertical_interp_to_z(z_txyp, data_txyp, z_out, bounds_error=False, n_jobs=n_jobs)  # (T,X,Y,Z)
+
+    # (2) Horizontal regrid for each (t,z') slice (parallelized)
+    Xo, Yo, Zo = len(x_out), len(y_out), len(z_out)
+    data_txyz = np.full((T, Xo, Yo, Zo), np.nan, dtype=data_txyp.dtype)
+    
+    # Determine number of jobs for horizontal regridding
+    n_slices = T * Zo
+    if n_jobs is None:
+        # Auto: Use parallelization only if we have enough slices to make it worthwhile
+        n_jobs_horiz = min(cpu_count(), max(1, n_slices // _HORIZONTAL_REGRID_PARALLEL_THRESHOLD)) if n_slices > _HORIZONTAL_REGRID_PARALLEL_THRESHOLD else 1
+    elif n_jobs == -1:
+        n_jobs_horiz = cpu_count()
+    elif n_jobs < 1:
+        n_jobs_horiz = 1
+    else:
+        n_jobs_horiz = n_jobs
+
+    if n_jobs_horiz == 1:
+        # Sequential execution
+        for ti in range(T):
+            for zi in range(Zo):
+                slab = data_txyz_on_orig_xy[ti, :, :, zi]   # (X, Y)
+                data_txyz[ti, :, :, zi] = horizontal_regrid_xy(x, y, slab, x_out, y_out, bounds_error=False)
+    else:
+        # Parallel execution
+        # Need a helper function that also accepts bounds_error parameter
+        def _regrid_horizontal_slice_simple(args):
+            ti, zi, slab, x, y, x_out, y_out = args
+            result = horizontal_regrid_xy(x, y, slab, x_out, y_out, bounds_error=False)
+            return (ti, zi, result)
+        
+        args_list = [
+            (ti, zi, data_txyz_on_orig_xy[ti, :, :, zi], x, y, x_out, y_out)
+            for ti in range(T) for zi in range(Zo)
+        ]
+        
+        with Pool(processes=n_jobs_horiz) as pool:
+            results = pool.map(_regrid_horizontal_slice_simple, args_list)
+        
+        # Collect results
+        for ti, zi, result in results:
+            data_txyz[ti, :, :, zi] = result
+
+    return data_txyz
 
 
 def save_regridded_data_to_netcdf(
