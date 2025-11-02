@@ -312,13 +312,24 @@ class ECMWFWeatherAPI:
         
         try:
             # Retrieve the data
-            self.client.retrieve(
+            result = self.client.retrieve(
                 'reanalysis-era5-pressure-levels',
                 request,
                 output_file
             )
+            
+            # Extract request_id from the result object
+            request_id = None
+            if hasattr(result, 'request_id'):
+                request_id = result.request_id
+            elif hasattr(result, 'reply') and isinstance(result.reply, dict):
+                request_id = result.reply.get('request_id')
+            
             logger.info(f"Successfully downloaded data to {output_file}")
-            return output_file
+            if request_id:
+                logger.info(f"Request ID: {request_id}")
+            
+            return (output_file, request_id)
         
         except Exception as e:
             logger.error(f"Failed to fetch weather data: {e}")

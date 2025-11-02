@@ -5,27 +5,24 @@ Convenient script to download temperature, u-wind, and v-wind from ERA5.
 This script downloads temperature, u-component of wind, and v-component of wind
 at all standard ERA5 pressure levels for a specified region and time period.
 
-The download is split into separate jobs - one per day - which can
-run in parallel for faster data retrieval. Once all jobs complete, the data
-is combined into a single NetCDF file.
+The download is split into separate jobs - one per day - which run in parallel
+for faster data retrieval. Each day is saved as a separate NetCDF file.
 
 Usage:
     python download_era5_wind_temp.py --latmin 30.0 --latmax 40.0 \
                                        --lonmin -110.0 --lonmax -100.0 \
                                        --start-date 2024-01-01 \
                                        --end-date 2024-01-02 \
-                                       --output era5_wind_temp.nc
+                                       --output ./output_dir
 
 Requirements:
     - ECMWF CDS API key configured (see README_ECMWF.md)
-    - Required packages: cdsapi, xarray, netCDF4, numpy
+    - Required packages: cdsapi, netCDF4, numpy
 """
 
 import argparse
 import sys
 import os
-import tempfile
-import shutil
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -33,12 +30,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, os.path.dirname(__file__))
 
 from ecmwf_weather_api import ECMWFWeatherAPI
-
-try:
-    import xarray as xr
-    XARRAY_AVAILABLE = True
-except ImportError:
-    XARRAY_AVAILABLE = False
 
 
 def parse_arguments():
@@ -81,7 +72,7 @@ Note: Download may take several minutes depending on request size and CDS server
     parser.add_argument('--end-date', type=str, required=True,
                         help='End date in YYYY-MM-DD format')
     parser.add_argument('--output', type=str, required=True,
-                        help='Output NetCDF file path')
+                        help='Output directory for NetCDF files (one file per day)')
     
     # Optional arguments
     parser.add_argument('--times', nargs='+', default=None,
@@ -131,7 +122,7 @@ def generate_date_list(start_date, end_date):
 
 
 def download_single_day(api, date_str, variables, pressure_levels, latmin, latmax, 
-                        lonmin, lonmax, times, temp_dir, day_idx, total_days):
+                        lonmin, lonmax, times, output_dir, day_idx, total_days):
     """
     Download data for a single day.
     
@@ -142,19 +133,20 @@ def download_single_day(api, date_str, variables, pressure_levels, latmin, latma
         pressure_levels: List of pressure levels in hPa
         latmin, latmax, lonmin, lonmax: Geographic bounds
         times: List of times
-        temp_dir: Temporary directory for storing individual files
+        output_dir: Output directory for storing files
         day_idx: Index of this day (for progress tracking)
         total_days: Total number of days
     
     Returns:
-        Tuple of (date_str, output_file_path) or (date_str, None) on error
+        Tuple of (date_str, output_file_path, request_id) or (date_str, None, None) on error
     """
     try:
-        output_file = os.path.join(temp_dir, f'day_{date_str}.nc')
+        # Use a temporary filename initially
+        temp_file = os.path.join(output_dir, f'temp_{date_str}.nc')
         
         print(f"[{day_idx+1}/{total_days}] Downloading {date_str}...")
         
-        api.fetch_weather_data(
+        output_file, request_id = api.fetch_weather_data(
             latmin=latmin,
             latmax=latmax,
             lonmin=lonmin,
@@ -163,74 +155,29 @@ def download_single_day(api, date_str, variables, pressure_levels, latmin, latma
             end_date=date_str,
             variables=variables,
             pressure_levels=pressure_levels,
-            output_file=output_file,
+            output_file=temp_file,
             times=times
         )
         
-        print(f"[{day_idx+1}/{total_days}] ✓ Completed {date_str}")
-        return (date_str, output_file)
+        # Rename file to use request_id if available, otherwise use date
+        if request_id:
+            final_file = os.path.join(output_dir, f'{request_id}.nc')
+        else:
+            final_file = os.path.join(output_dir, f'{date_str}.nc')
+        
+        if os.path.exists(temp_file):
+            os.rename(temp_file, final_file)
+            output_file = final_file
+        
+        print(f"[{day_idx+1}/{total_days}] ✓ Completed {date_str} -> {os.path.basename(final_file)}")
+        return (date_str, output_file, request_id)
     
     except Exception as e:
         print(f"[{day_idx+1}/{total_days}] ✗ Failed {date_str}: {e}")
-        return (date_str, None)
+        return (date_str, None, None)
 
 
-def combine_netcdf_files(file_list, output_file):
-    """
-    Combine multiple NetCDF files (one per day) into a single file.
-    
-    Args:
-        file_list: List of tuples (date_str, filepath)
-        output_file: Path for the combined output file
-    
-    Returns:
-        True if successful, False otherwise
-    """
-    if not XARRAY_AVAILABLE:
-        print("Error: xarray is required for combining files.")
-        print("Install with: pip install xarray netCDF4")
-        return False
-    
-    try:
-        print(f"\nCombining {len(file_list)} daily files...")
-        
-        # Filter out failed downloads
-        valid_files = [(date_str, path) for date_str, path in file_list if path is not None]
-        
-        if not valid_files:
-            print("Error: No files to combine (all downloads failed)")
-            return False
-        
-        if len(valid_files) < len(file_list):
-            failed = len(file_list) - len(valid_files)
-            print(f"Warning: {failed} day(s) failed to download")
-        
-        # Load all datasets
-        datasets = []
-        for date_str, filepath in valid_files:
-            ds = xr.open_dataset(filepath)
-            datasets.append(ds)
-        
-        # Combine along the time dimension
-        combined_ds = xr.concat(datasets, dim='time')
-        
-        # Sort by time
-        combined_ds = combined_ds.sortby('time')
-        
-        # Save to output file
-        combined_ds.to_netcdf(output_file)
-        combined_ds.close()
-        
-        # Close individual datasets
-        for ds in datasets:
-            ds.close()
-        
-        print(f"✓ Successfully combined into: {output_file}")
-        return True
-    
-    except Exception as e:
-        print(f"Error combining files: {e}")
-        return False
+
 
 
 def main():
@@ -296,57 +243,49 @@ def main():
         # Generate list of dates to download
         dates = generate_date_list(args.start_date, args.end_date)
         
+        # Create output directory if it doesn't exist
+        os.makedirs(args.output, exist_ok=True)
+        
         print(f"\nDownloading {len(dates)} day(s) using {args.jobs} parallel jobs...")
-        print("(Each job downloads one day with all pressure levels. This may take several minutes.)")
+        print(f"(Each job downloads one day with all pressure levels. This may take several minutes.)")
+        print(f"Output directory: {args.output}")
         
-        # Create temporary directory for individual day files
-        temp_dir = tempfile.mkdtemp(prefix='era5_download_')
+        # Download each day in parallel
+        results = []
+        with ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            futures = {}
+            for idx, date_str in enumerate(dates):
+                future = executor.submit(
+                    download_single_day,
+                    api, date_str, variables, pressure_levels,
+                    args.latmin, args.latmax, args.lonmin, args.lonmax,
+                    args.times, args.output, idx, len(dates)
+                )
+                futures[future] = date_str
+            
+            # Collect results as they complete
+            for future in as_completed(futures):
+                date_str, filepath, request_id = future.result()
+                if filepath:
+                    results.append((date_str, filepath, request_id))
         
-        try:
-            # Download each day in parallel
-            results = []
-            with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-                futures = {}
-                for idx, date_str in enumerate(dates):
-                    future = executor.submit(
-                        download_single_day,
-                        api, date_str, variables, pressure_levels,
-                        args.latmin, args.latmax, args.lonmin, args.lonmax,
-                        args.times, temp_dir, idx, len(dates)
-                    )
-                    futures[future] = date_str
-                
-                # Collect results as they complete
-                for future in as_completed(futures):
-                    date_str, filepath = future.result()
-                    results.append((date_str, filepath))
-            
-            # Sort results by date for consistent ordering
-            results.sort(key=lambda x: x[0])
-            
-            # Combine all files into one
-            if not combine_netcdf_files(results, args.output):
-                print("\n✗ Failed to combine NetCDF files")
-                sys.exit(1)
-            
-            # Load and display summary
-            print("\nLoading data for verification...")
-            data = api.load_data(args.output)
-            
-            print("\nData Summary:")
-            print(f"  Variables: {list(data['variables'].keys())}")
-            print(f"  Coordinates: {list(data['coordinates'].keys())}")
-            
-            for coord_name, coord_values in data['coordinates'].items():
-                if len(coord_values.shape) == 1:
-                    print(f"  {coord_name}: {len(coord_values)} points, "
-                          f"range [{coord_values.min():.2f}, {coord_values.max():.2f}]")
+        # Report summary
+        print(f"\n{'='*70}")
+        print(f"Download Summary:")
+        print(f"{'='*70}")
+        print(f"Total days requested: {len(dates)}")
+        print(f"Successfully downloaded: {len(results)}")
+        print(f"Failed: {len(dates) - len(results)}")
         
-        finally:
-            # Clean up temporary directory
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
-                print(f"\nCleaned up temporary files")
+        if results:
+            print(f"\nDownloaded files:")
+            for date_str, filepath, request_id in sorted(results):
+                filename = os.path.basename(filepath)
+                print(f"  {date_str}: {filename}")
+        
+        if len(results) < len(dates):
+            print(f"\n⚠ Warning: Some downloads failed")
+            sys.exit(1)
         
         print("\n" + "=" * 70)
         print("Download completed successfully!")

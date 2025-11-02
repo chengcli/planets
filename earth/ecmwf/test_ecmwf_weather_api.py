@@ -201,7 +201,7 @@ class TestECMWFWeatherAPI(unittest.TestCase):
             output_file = tmp.name
         
         try:
-            result = api.fetch_weather_data(
+            result_file, request_id = api.fetch_weather_data(
                 latmin=30.0,
                 latmax=40.0,
                 lonmin=-110.0,
@@ -214,7 +214,7 @@ class TestECMWFWeatherAPI(unittest.TestCase):
             )
             
             # Verify the result
-            self.assertEqual(result, output_file)
+            self.assertEqual(result_file, output_file)
             
             # Verify the client retrieve method was called
             api.client.retrieve.assert_called_once()

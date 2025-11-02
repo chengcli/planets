@@ -290,7 +290,7 @@ python example_ecmwf_usage.py
 
 ## Convenience Scripts
 
-Two convenient scripts are provided for common download tasks. Both scripts use **parallel downloads** where each day is downloaded as a separate job, significantly improving download speed.
+Two convenient scripts are provided for common download tasks. Both scripts use **parallel downloads** where each day is downloaded as a separate job, significantly improving download speed. Each day is saved as a separate NetCDF file.
 
 ### 1. Download Wind and Temperature (`download_era5_wind_temp.py`)
 
@@ -303,7 +303,7 @@ python download_era5_wind_temp.py \
     --lonmin -106.8 --lonmax -105.8 \
     --start-date 2024-01-01 \
     --end-date 2024-01-02 \
-    --output wind_temp_data.nc
+    --output ./output_directory
 ```
 
 **Optional arguments:**
@@ -320,7 +320,7 @@ python download_era5_wind_temp.py \
     --start-date 2024-01-01 \
     --end-date 2024-01-07 \
     --jobs 7 \
-    --output wind_temp_data.nc
+    --output ./output_directory
 ```
 
 ### 2. Download Density Variables (`download_era5_density_vars.py`)
@@ -339,7 +339,7 @@ python download_era5_density_vars.py \
     --lonmin -106.8 --lonmax -105.8 \
     --start-date 2024-01-01 \
     --end-date 2024-01-02 \
-    --output density_data.nc
+    --output ./output_directory
 ```
 
 **Optional arguments:**
@@ -353,9 +353,10 @@ python download_era5_density_vars.py \
 Both scripts implement a **parallel download strategy**:
 - Each day is downloaded as a separate job (with all pressure levels)
 - Multiple jobs run in parallel (configurable with `--jobs`, default: 4)
-- Individual daily files are automatically combined into a single NetCDF file along the time dimension
-- Temporary files are cleaned up after successful combination
-- Failed downloads are reported but don't prevent combining successful days
+- Each day is saved as a separate NetCDF file in the output directory
+- Files are named using the CDS request ID (e.g., `21c3fd64-5c8a-4cc8-a01f-a2e1e4e988f9.nc`)
+- If request ID is not available, files are named by date (e.g., `2024-01-01.nc`)
+- Failed downloads are reported but don't prevent other downloads from completing
 
 This approach provides several benefits:
 - **Faster downloads**: Multiple days download simultaneously
@@ -363,6 +364,7 @@ This approach provides several benefits:
 - **Progress tracking**: See real-time progress for each day
 - **Flexible parallelism**: Adjust the number of parallel jobs based on your network and CDS quota
 - **Efficient for date ranges**: Parallelizes along the time dimension, making it ideal for multi-day downloads
+- **No post-processing**: Files are ready to use immediately, no combining step needed
 
 **Note:** Both scripts download data at all 37 standard ERA5 pressure levels (1, 2, 3, 5, 7, 10, 20, 30, 50, 70, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000 hPa) for each day in the specified date range.
 
