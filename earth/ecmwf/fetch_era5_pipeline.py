@@ -262,6 +262,55 @@ def calculate_latlon_limits(geometry: Dict) -> Tuple[float, float, float, float]
     return latmin, latmax, lonmin, lonmax
 
 
+def validate_domain_size(latmin: float, latmax: float, 
+                        lonmin: float, lonmax: float,
+                        min_size_degrees: float = 1.0) -> None:
+    """
+    Validate that the horizontal domain size meets minimum requirements.
+    
+    The domain must be at least 100 km (approximately 1 degree) in both
+    latitude and longitude directions.
+    
+    Args:
+        latmin, latmax, lonmin, lonmax: Domain limits in degrees
+        min_size_degrees: Minimum size in degrees (default: 1.0 degree ≈ 100 km)
+        
+    Raises:
+        ValueError: If domain size is too small in either direction
+    """
+    lat_range = latmax - latmin
+    lon_range = lonmax - lonmin
+    
+    # Convert to approximate kilometers for error message
+    # 1 degree ≈ 111.32 km
+    km_per_degree = 111.32
+    lat_range_km = lat_range * km_per_degree
+    lon_range_km = lon_range * km_per_degree
+    min_size_km = min_size_degrees * km_per_degree
+    
+    errors = []
+    
+    if lat_range < min_size_degrees:
+        errors.append(
+            f"North-South extent ({lat_range:.4f}° ≈ {lat_range_km:.1f} km) is less than "
+            f"minimum required {min_size_degrees:.1f}° ≈ {min_size_km:.1f} km"
+        )
+    
+    if lon_range < min_size_degrees:
+        errors.append(
+            f"East-West extent ({lon_range:.4f}° ≈ {lon_range_km:.1f} km) is less than "
+            f"minimum required {min_size_degrees:.1f}° ≈ {min_size_km:.1f} km"
+        )
+    
+    if errors:
+        error_msg = "Domain size validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+        error_msg += (
+            "\n\nThe horizontal domain size must be at least 100 km (1 degree) in both directions. "
+            "Please increase the domain bounds in your YAML configuration."
+        )
+        raise ValueError(error_msg)
+
+
 def add_buffer_zone(latmin: float, latmax: float, 
                    lonmin: float, lonmax: float,
                    buffer_percent: float = 0.10) -> Tuple[float, float, float, float]:
@@ -453,6 +502,11 @@ The script will:
         print(f"  Original limits (with ghost zones):")
         print(f"    Latitude:  [{latmin:.4f}, {latmax:.4f}]")
         print(f"    Longitude: [{lonmin:.4f}, {lonmax:.4f}]")
+        
+        # Validate domain size
+        print("\nValidating domain size...")
+        validate_domain_size(latmin, latmax, lonmin, lonmax, min_size_degrees=1.0)
+        print(f"  ✓ Domain size validation passed")
         
         # Add buffer zone
         print("\nAdding 10% buffer zone...")

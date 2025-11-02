@@ -308,6 +308,107 @@ class TestCalculateLatLonLimits(unittest.TestCase):
         self.assertIsInstance(lonmax, float)
 
 
+class TestValidateDomainSize(unittest.TestCase):
+    """Test cases for validate_domain_size function."""
+    
+    def test_valid_domain_size(self):
+        """Test that valid domain size passes validation."""
+        # Domain with 10 degrees lat-lon (well above 1 degree minimum)
+        latmin, latmax = 30.0, 40.0
+        lonmin, lonmax = -110.0, -100.0
+        
+        # Should not raise exception
+        try:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax)
+        except ValueError:
+            self.fail("validate_domain_size raised ValueError unexpectedly")
+    
+    def test_valid_domain_size_at_minimum(self):
+        """Test that domain size exactly at minimum passes validation."""
+        # Domain with exactly 1 degree in both directions
+        latmin, latmax = 30.0, 31.0
+        lonmin, lonmax = -110.0, -109.0
+        
+        # Should not raise exception
+        try:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax)
+        except ValueError:
+            self.fail("validate_domain_size raised ValueError unexpectedly")
+    
+    def test_invalid_domain_size_latitude(self):
+        """Test that domain too small in latitude direction fails validation."""
+        # Domain with 0.5 degrees latitude (below 1 degree minimum)
+        latmin, latmax = 30.0, 30.5
+        lonmin, lonmax = -110.0, -100.0  # 10 degrees, well above minimum
+        
+        with self.assertRaises(ValueError) as context:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax)
+        
+        self.assertIn("North-South extent", str(context.exception))
+        self.assertIn("0.5000°", str(context.exception))
+        self.assertIn("minimum required", str(context.exception))
+    
+    def test_invalid_domain_size_longitude(self):
+        """Test that domain too small in longitude direction fails validation."""
+        # Domain with 0.3 degrees longitude (below 1 degree minimum)
+        latmin, latmax = 30.0, 40.0  # 10 degrees, well above minimum
+        lonmin, lonmax = -110.0, -109.7
+        
+        with self.assertRaises(ValueError) as context:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax)
+        
+        self.assertIn("East-West extent", str(context.exception))
+        self.assertIn("0.3000°", str(context.exception))
+        self.assertIn("minimum required", str(context.exception))
+    
+    def test_invalid_domain_size_both_directions(self):
+        """Test that domain too small in both directions reports both errors."""
+        # Domain with 0.5 degrees in both directions (below 1 degree minimum)
+        latmin, latmax = 30.0, 30.5
+        lonmin, lonmax = -110.0, -109.5
+        
+        with self.assertRaises(ValueError) as context:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax)
+        
+        error_msg = str(context.exception)
+        self.assertIn("North-South extent", error_msg)
+        self.assertIn("East-West extent", error_msg)
+        self.assertIn("0.5000°", error_msg)
+    
+    def test_domain_size_custom_minimum(self):
+        """Test that custom minimum size can be specified."""
+        # Domain with 1.5 degrees
+        latmin, latmax = 30.0, 31.5
+        lonmin, lonmax = -110.0, -108.5
+        
+        # Should pass with 1 degree minimum
+        try:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax, min_size_degrees=1.0)
+        except ValueError:
+            self.fail("validate_domain_size raised ValueError unexpectedly")
+        
+        # Should fail with 2 degree minimum
+        with self.assertRaises(ValueError) as context:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax, min_size_degrees=2.0)
+        
+        self.assertIn("minimum required", str(context.exception))
+    
+    def test_error_message_includes_km_conversion(self):
+        """Test that error message includes approximate kilometer values."""
+        # Domain with 0.5 degrees (approximately 55.66 km)
+        latmin, latmax = 30.0, 30.5
+        lonmin, lonmax = -110.0, -100.0
+        
+        with self.assertRaises(ValueError) as context:
+            fetch_era5_pipeline.validate_domain_size(latmin, latmax, lonmin, lonmax)
+        
+        error_msg = str(context.exception)
+        # Should mention approximate km values
+        self.assertIn("km", error_msg)
+        self.assertIn("55.7 km", error_msg)  # 0.5 * 111.32 ≈ 55.66
+        self.assertIn("111.3 km", error_msg)  # 1.0 * 111.32 ≈ 111.32
+
+
 class TestAddBufferZone(unittest.TestCase):
     """Test cases for add_buffer_zone function."""
     
@@ -481,11 +582,12 @@ class TestMainIntegration(unittest.TestCase):
         """Test main function with valid configuration."""
         mock_run.return_value = MagicMock(returncode=0)
         
-        # Create test YAML file
+        # Create test YAML file with domain size >= 100 km (1 degree)
+        # Using 150 km x 150 km domain to meet minimum requirements
         yaml_content = """
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 20.e3, x3min: 0., x3max: 10.e3}
+  bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 150.e3, x3min: 0., x3max: 150.e3}
   cells: {nx1: 100, nx2: 300, nx3: 150, nghost: 3}
   center_latitude: 30.
   center_longitude: -110.
@@ -523,6 +625,7 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestExtractGeometryInfo))
     suite.addTests(loader.loadTestsFromTestCase(TestExtractIntegrationInfo))
     suite.addTests(loader.loadTestsFromTestCase(TestCalculateLatLonLimits))
+    suite.addTests(loader.loadTestsFromTestCase(TestValidateDomainSize))
     suite.addTests(loader.loadTestsFromTestCase(TestAddBufferZone))
     suite.addTests(loader.loadTestsFromTestCase(TestFormatLatLonString))
     suite.addTests(loader.loadTestsFromTestCase(TestGenerateOutputDirname))

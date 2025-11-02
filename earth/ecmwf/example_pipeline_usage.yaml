@@ -9,13 +9,14 @@ geometry:
   # x1 = Z direction (vertical)
   # x2 = Y direction (north-south)
   # x3 = X direction (east-west)
+  # NOTE: Horizontal domain size must be at least 100 km (1 degree) in both directions
   bounds:
     x1min: 0.
     x1max: 10.e3      # 10 km vertical extent
     x2min: 0.
-    x2max: 20.e3      # 20 km north-south extent
+    x2max: 150.e3     # 150 km north-south extent (minimum 100 km required)
     x3min: 0.
-    x3max: 10.e3      # 10 km east-west extent
+    x3max: 150.e3     # 150 km east-west extent (minimum 100 km required)
   
   # Grid cell configuration
   cells:
@@ -41,11 +42,12 @@ integration:
   end-date: 2024-01-02
 
 # The pipeline will:
-# 1. Calculate lat-lon limits: approximately 29.91°N to 30.09°N, 110.05°W to 109.95°W
-# 2. Add 10% buffer: approximately 29.89°N to 30.11°N, 110.06°W to 109.94°W
-# 3. Create output directory: 29.89N_30.11N_110.06W_109.94W/
-# 4. Fetch ERA5 densities and dynamics data for both days
-# 5. Save files as:
+# 1. Calculate lat-lon limits: approximately 29.33°N to 30.67°N, 110.78°W to 109.22°W
+# 2. Validate domain size (must be at least 100 km / 1 degree in both directions)
+# 3. Add 10% buffer: approximately 29.19°N to 30.81°N, 110.93°W to 109.07°W
+# 4. Create output directory: 29.19N_30.81N_110.93W_109.07W/
+# 5. Fetch ERA5 densities and dynamics data for both days
+# 6. Save files as:
 #    - era5_hourly_densities_20240101.nc
 #    - era5_hourly_densities_20240102.nc
 #    - era5_hourly_dynamics_20240101.nc
