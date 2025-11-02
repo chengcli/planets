@@ -166,9 +166,9 @@ def main():
     print(f"   Output shape: {topo_yx.shape}")
     print(f"   Output topography range: [{np.nanmin(topo_yx):.2f}, {np.nanmax(topo_yx):.2f}] m")
     
-    # Step 6: Regrid temperature using pre-computed heights
-    print("\n5. Regridding temperature field (using pre-computed heights)...")
-    print("   This may take a moment...")
+    # Step 6: Regrid temperature using pre-computed heights with parallelization
+    print("\n5. Regridding temperature field (using pre-computed heights and parallel processing)...")
+    print("   Using automatic parallelization (n_jobs=None) for optimal performance...")
     
     try:
         temp_tzyx = regrid_pressure_to_height(
@@ -184,7 +184,8 @@ def main():
             planet_grav,
             planet_radius,
             bounds_error=False,  # Allow NaNs at boundaries
-            z_tpll=z_tpll  # Use pre-computed heights for efficiency
+            z_tpll=z_tpll,  # Use pre-computed heights for efficiency
+            n_jobs=None  # Auto-parallelization: uses multiple CPUs for large datasets
         )
         
         print(f"   Output shape: {temp_tzyx.shape}")
@@ -196,7 +197,7 @@ def main():
         return
     
     # Step 7: Regrid density using same pre-computed heights (efficient!)
-    print("\n6. Regridding density field (using pre-computed heights)...")
+    print("\n6. Regridding density field (using pre-computed heights and parallel processing)...")
     
     rho_tzyx = regrid_pressure_to_height(
         rho_tpll,
@@ -211,12 +212,13 @@ def main():
         planet_grav,
         planet_radius,
         bounds_error=False,
-        z_tpll=z_tpll  # Reuse pre-computed heights - no recomputation!
+        z_tpll=z_tpll,  # Reuse pre-computed heights - no recomputation!
+        n_jobs=None  # Auto-parallelization
     )
     
     print(f"   Output shape: {rho_tzyx.shape}")
     print(f"   Output density range: [{np.nanmin(rho_tzyx):.3f}, {np.nanmax(rho_tzyx):.3f}] kg/m^3")
-    print(f"\n   Note: Heights computed once and reused for both variables!")
+    print(f"\n   Note: Heights computed once, reused for both variables, and processed in parallel!")
     
     # Step 8: Save to NetCDF files
     print("\n7. Saving regridded data to NetCDF files...")
