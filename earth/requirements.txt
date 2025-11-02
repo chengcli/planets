@@ -1,4 +1,5 @@
 xarray
 netCDF4
 numpy
+scipy
 cdsapi>=0.7.7

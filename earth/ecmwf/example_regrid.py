@@ -166,9 +166,9 @@ def main():
     print(f"   Output shape: {topo_yx.shape}")
     print(f"   Output topography range: [{np.nanmin(topo_yx):.2f}, {np.nanmax(topo_yx):.2f}] m")
     
-    # Step 6: Regrid temperature using pre-computed heights
-    print("\n5. Regridding temperature field (using pre-computed heights)...")
-    print("   This may take a moment...")
+    # Step 6: Regrid temperature using pre-computed heights with parallelization
+    print("\n5. Regridding temperature field (using pre-computed heights and parallel processing)...")
+    print("   Using automatic parallelization (n_jobs=None) for optimal performance...")
     
     try:
         temp_tzyx = regrid_pressure_to_height(
@@ -184,7 +184,8 @@ def main():
             planet_grav,
             planet_radius,
             bounds_error=False,  # Allow NaNs at boundaries
-            z_tpll=z_tpll  # Use pre-computed heights for efficiency
+            z_tpll=z_tpll,  # Use pre-computed heights for efficiency
+            n_jobs=None  # Auto-parallelization: uses multiple CPUs for large datasets
         )
         
         print(f"   Output shape: {temp_tzyx.shape}")
@@ -196,7 +197,7 @@ def main():
         return
     
     # Step 7: Regrid density using same pre-computed heights (efficient!)
-    print("\n6. Regridding density field (using pre-computed heights)...")
+    print("\n6. Regridding density field (using pre-computed heights and parallel processing)...")
     
     rho_tzyx = regrid_pressure_to_height(
         rho_tpll,
@@ -211,12 +212,50 @@ def main():
         planet_grav,
         planet_radius,
         bounds_error=False,
-        z_tpll=z_tpll  # Reuse pre-computed heights - no recomputation!
+        z_tpll=z_tpll,  # Reuse pre-computed heights - no recomputation!
+        n_jobs=None  # Auto-parallelization
     )
     
     print(f"   Output shape: {rho_tzyx.shape}")
     print(f"   Output density range: [{np.nanmin(rho_tzyx):.3f}, {np.nanmax(rho_tzyx):.3f}] kg/m^3")
-    print(f"\n   Note: Heights computed once and reused for both variables!")
+    print(f"\n   Note: Heights computed once, reused for both variables, and processed in parallel!")
+    
+    # Alternative: Step 6b - Regrid multiple variables in one call (even more efficient!)
+    print("\n6b. Alternative approach: Regrid multiple variables at once...")
+    print("    This parallelizes across variables for even better performance!")
+    
+    from regrid import regrid_multiple_variables
+    
+    variables_to_regrid = {
+        'temperature': temp_tpll,
+        'density': rho_tpll,
+    }
+    
+    results = regrid_multiple_variables(
+        variables_to_regrid,
+        rho_tpll,
+        topo_ll,
+        plev,
+        lats,
+        lons,
+        x1f,
+        x2f,
+        x3f,
+        planet_grav,
+        planet_radius,
+        bounds_error=False,
+        z_tpll=z_tpll,  # Reuse pre-computed heights
+        n_jobs=-1       # Use all CPUs (prioritizes across variables)
+    )
+    
+    print(f"   Regridded {len(results)} variables in parallel")
+    print(f"   Temperature shape: {results['temperature'].shape}")
+    print(f"   Density shape: {results['density'].shape}")
+    print(f"   Note: This approach is ideal when regridding many variables!")
+    
+    # Use results from multi-variable function for saving
+    temp_tzyx = results['temperature']
+    rho_tzyx = results['density']
     
     # Step 8: Save to NetCDF files
     print("\n7. Saving regridded data to NetCDF files...")

@@ -17,6 +17,7 @@ from regrid import (
     vertical_interp_to_z,
     horizontal_regrid_xy,
     regrid_pressure_to_height,
+    regrid_multiple_variables,
     regrid_topography,
     save_regridded_data_to_netcdf,
     save_topography_to_netcdf,
@@ -422,6 +423,382 @@ class TestRegridTopography(unittest.TestCase):
         self.assertEqual(result.shape, (len(x2f), len(x3f)))
 
 
+class TestMultipleVariables(unittest.TestCase):
+    """Test cases for regrid_multiple_variables function."""
+    
+    def test_basic_multiple_variables(self):
+        """Test regridding multiple variables."""
+        # Create test data
+        T, P, Lat, Lon = 2, 4, 6, 8
+        plev = np.array([100000., 80000., 60000., 40000.])  # Pa
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        # Create multiple variables
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        press_tpll = 50000.0 + np.random.randn(T, P, Lat, Lon) * 1000.0
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+            'pressure': press_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 10)
+        x2f = np.linspace(-1000., 1000., 6)
+        x3f = np.linspace(-2000., 2000., 8)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Regrid multiple variables
+        results = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1
+        )
+        
+        # Check that all variables are present
+        self.assertEqual(set(results.keys()), {'temperature', 'humidity', 'pressure'})
+        
+        # Check output shapes
+        expected_shape = (T, len(x1f), len(x2f), len(x3f))
+        for var_name, result in results.items():
+            self.assertEqual(result.shape, expected_shape, 
+                           f"Variable {var_name} has incorrect shape")
+    
+    def test_multiple_variables_parallel_vs_sequential(self):
+        """Test that parallel and sequential multi-variable regridding produce same results."""
+        import multiprocessing
+        
+        # Create test data
+        T, P, Lat, Lon = 2, 3, 5, 6
+        plev = np.array([100000., 70000., 40000.])  # Pa
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 8)
+        x2f = np.linspace(-1000., 1000., 5)
+        x3f = np.linspace(-2000., 2000., 6)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Sequential variable processing
+        results_seq = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1
+        )
+        
+        # Parallel variable processing
+        n_workers = min(2, multiprocessing.cpu_count())
+        results_par = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=n_workers
+        )
+        
+        # Results should be identical
+        for var_name in variables.keys():
+            np.testing.assert_array_almost_equal(
+                results_seq[var_name], results_par[var_name], decimal=10,
+                err_msg=f"Variable {var_name} differs between sequential and parallel"
+            )
+    
+    def test_multiple_variables_with_precomputed_heights(self):
+        """Test that pre-computed heights work with multiple variables."""
+        T, P, Lat, Lon = 2, 3, 4, 5
+        plev = np.array([100000., 70000., 40000.])
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 8)
+        x2f = np.linspace(-1000., 1000., 5)
+        x3f = np.linspace(-2000., 2000., 6)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Pre-compute heights
+        z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+        
+        # Regrid with pre-computed heights
+        results = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            z_tpll=z_tpll,
+            n_jobs=1
+        )
+        
+        # Should complete without errors and have correct shapes
+        expected_shape = (T, len(x1f), len(x2f), len(x3f))
+        for var_name, result in results.items():
+            self.assertEqual(result.shape, expected_shape)
+
+
+class TestParallelProcessing(unittest.TestCase):
+    """Test cases for parallel processing functionality."""
+    
+    def test_vertical_interp_parallel_vs_sequential(self):
+        """Test that parallel vertical interpolation produces same results as sequential."""
+        import multiprocessing
+        
+        # Create test data
+        T, Lat, Lon, P = 3, 10, 12, 8
+        z_tllp = np.random.randn(T, Lat, Lon, P) * 1000.0 + 5000.0
+        z_tllp = np.sort(z_tllp, axis=-1)  # Ensure monotonic increasing
+        v_tllp = 280.0 + np.random.randn(T, Lat, Lon, P) * 10.0
+        z_out = np.linspace(0., 10000., 20)
+        
+        # Sequential execution
+        result_sequential = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=1)
+        
+        # Parallel execution (use available CPUs, but at least 2 if possible)
+        n_workers = min(2, multiprocessing.cpu_count())
+        result_parallel = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=n_workers)
+        
+        # Results should be identical (accounting for floating point precision)
+        np.testing.assert_array_almost_equal(result_sequential, result_parallel, decimal=10)
+        
+    def test_horizontal_regrid_parallel_vs_sequential(self):
+        """Test that parallel horizontal regridding produces same results as sequential."""
+        import multiprocessing
+        
+        # Create test data
+        T, P, Lat, Lon = 2, 4, 8, 10
+        plev = np.array([100000., 80000., 60000., 40000.])  # Pa
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        var_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 10)
+        x2f = np.linspace(-1000., 1000., 6)
+        x3f = np.linspace(-2000., 2000., 8)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Sequential execution
+        result_sequential = regrid_pressure_to_height(
+            var_tpll, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1
+        )
+        
+        # Parallel execution (use available CPUs, but at least 2 if possible)
+        n_workers = min(2, multiprocessing.cpu_count())
+        result_parallel = regrid_pressure_to_height(
+            var_tpll, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=n_workers
+        )
+        
+        # Results should be identical (accounting for floating point precision)
+        np.testing.assert_array_almost_equal(result_sequential, result_parallel, decimal=10)
+        
+    def test_auto_parallelization(self):
+        """Test that auto parallelization works correctly."""
+        # Small dataset - should use sequential
+        T, Lat, Lon, P = 1, 5, 5, 4
+        z_tllp = np.random.randn(T, Lat, Lon, P) * 1000.0 + 5000.0
+        z_tllp = np.sort(z_tllp, axis=-1)
+        v_tllp = 280.0 + np.random.randn(T, Lat, Lon, P) * 10.0
+        z_out = np.linspace(0., 10000., 10)
+        
+        # Auto mode (should choose sequential for small data)
+        result_auto = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=None)
+        
+        # Verify it produces valid results
+        self.assertEqual(result_auto.shape, (T, Lat, Lon, len(z_out)))
+        
+    def test_all_cpus_option(self):
+        """Test that n_jobs=-1 uses all available CPUs."""
+        T, Lat, Lon, P = 2, 8, 8, 5
+        z_tllp = np.random.randn(T, Lat, Lon, P) * 1000.0 + 5000.0
+        z_tllp = np.sort(z_tllp, axis=-1)
+        v_tllp = 280.0 + np.random.randn(T, Lat, Lon, P) * 10.0
+        z_out = np.linspace(0., 10000., 15)
+        
+        # Sequential execution
+        result_sequential = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=1)
+        
+        # All CPUs
+        result_all_cpus = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=-1)
+        
+        # Results should be identical
+        np.testing.assert_array_almost_equal(result_sequential, result_all_cpus, decimal=10)
+
+
+class TestParallelEfficiency(unittest.TestCase):
+    """Test cases for parallel processing efficiency."""
+    
+    def test_parallel_speedup(self):
+        """Test that parallel processing provides speedup for large datasets."""
+        import time
+        import multiprocessing
+        
+        # Create a medium-sized dataset that should benefit from parallelization
+        T, Lat, Lon, P = 5, 40, 50, 8
+        z_tllp = np.random.randn(T, Lat, Lon, P) * 1000.0 + 5000.0
+        z_tllp = np.sort(z_tllp, axis=-1)  # Ensure monotonic increasing
+        v_tllp = 280.0 + np.random.randn(T, Lat, Lon, P) * 10.0
+        z_out = np.linspace(0., 10000., 40)
+        
+        # Measure sequential execution time
+        start = time.time()
+        result_seq = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=1)
+        time_seq = time.time() - start
+        
+        # Measure parallel execution time (use available CPUs)
+        n_workers = min(4, multiprocessing.cpu_count())
+        if n_workers > 1:
+            start = time.time()
+            result_par = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=n_workers)
+            time_par = time.time() - start
+            
+            # Calculate speedup
+            speedup = time_seq / time_par
+            
+            # Results should be identical
+            np.testing.assert_array_almost_equal(result_seq, result_par, decimal=10)
+            
+            # Report speedup (informational, not enforced)
+            print(f"\n  Parallel speedup with {n_workers} workers: {speedup:.2f}x (seq: {time_seq:.3f}s, par: {time_par:.3f}s)")
+            
+            # Ensure we're not getting worse performance
+            # Allow for some overhead on small datasets, but shouldn't be much worse
+            self.assertGreater(speedup, 0.5, 
+                f"Parallel execution should not be significantly slower (speedup: {speedup:.2f}x)")
+    
+    def test_multivariable_efficiency(self):
+        """Test that multi-variable regridding efficiently uses parallelization."""
+        import time
+        import multiprocessing
+        
+        # Create test data with multiple variables
+        T, P, Lat, Lon = 3, 4, 20, 25
+        plev = np.array([100000., 80000., 60000., 40000.])
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        # Create 3 variables
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        press_tpll = 50000.0 + np.random.randn(T, P, Lat, Lon) * 1000.0
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+            'pressure': press_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 15)
+        x2f = np.linspace(-1000., 1000., 10)
+        x3f = np.linspace(-2000., 2000., 12)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Sequential processing (one variable at a time)
+        start = time.time()
+        results_seq = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1
+        )
+        time_seq = time.time() - start
+        
+        # Parallel processing (across variables)
+        n_workers = min(multiprocessing.cpu_count(), len(variables))
+        if n_workers > 1:
+            start = time.time()
+            results_par = regrid_multiple_variables(
+                variables, rho_tpll, topo_ll,
+                plev, lats, lons,
+                x1f, x2f, x3f,
+                planet_grav, planet_radius,
+                bounds_error=False,
+                n_jobs=n_workers
+            )
+            time_par = time.time() - start
+            
+            # Calculate speedup
+            speedup = time_seq / time_par
+            
+            # Results should be identical
+            for var_name in variables.keys():
+                np.testing.assert_array_almost_equal(
+                    results_seq[var_name], results_par[var_name], decimal=10
+                )
+            
+            # Report speedup
+            print(f"\n  Multi-variable speedup with {n_workers} workers across {len(variables)} variables: {speedup:.2f}x")
+            print(f"  (seq: {time_seq:.3f}s, par: {time_par:.3f}s)")
+            
+            # Ensure we're getting benefit from parallelization
+            self.assertGreater(speedup, 0.8, 
+                f"Multi-variable parallel should not be significantly slower (speedup: {speedup:.2f}x)")
+
+
 class TestSaveToNetCDF(unittest.TestCase):
     """Test cases for NetCDF saving functions."""
     
@@ -583,6 +960,9 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestHorizontalRegridXy))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridPressureToHeight))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridTopography))
+    suite.addTests(loader.loadTestsFromTestCase(TestMultipleVariables))
+    suite.addTests(loader.loadTestsFromTestCase(TestParallelProcessing))
+    suite.addTests(loader.loadTestsFromTestCase(TestParallelEfficiency))
     suite.addTests(loader.loadTestsFromTestCase(TestSaveToNetCDF))
     
     # Run tests

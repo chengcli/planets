@@ -5,6 +5,7 @@ This module provides functions to regrid ECMWF ERA5 data from pressure-lat-lon
 grids to uniform Cartesian distance grids (height-Y-X) for atmospheric modeling.
 
 Functions:
+    compute_z_from_p: Convert pressure levels to height (T,X,Y,P ordering)
     compute_dz_from_plev: Compute layer thickness from pressure levels
     compute_heights_from_dz: Compute absolute heights from layer thickness and topography
     compute_height_grid: Compute height grid once for reuse with multiple variables
@@ -12,16 +13,65 @@ Functions:
     vertical_interp_to_z: Vertical interpolation to uniform height grid
     horizontal_regrid_xy: Horizontal regridding on regular grids
     regrid_pressure_to_height: Complete pipeline from (T,P,Lat,Lon) to (T,Z,Y,X)
+    regrid_multiple_variables: Regrid multiple variables in parallel for improved performance
     regrid_topography: Regrid topographic elevation to distance grids
+    regrid_txyz_from_txyp: Full pipeline from (T,X,Y,P) to (T,X',Y',Z')
     save_regridded_data_to_netcdf: Save regridded atmospheric data to NetCDF with metadata
     save_topography_to_netcdf: Save regridded topography to NetCDF with metadata
 """
 
 from typing import Tuple, Optional, Dict, Any
 from datetime import datetime
+from multiprocessing import Pool, cpu_count
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
+
+# Parallelization thresholds
+_VERTICAL_INTERP_PARALLEL_THRESHOLD = 100  # Minimum columns for parallel vertical interpolation
+_HORIZONTAL_REGRID_PARALLEL_THRESHOLD = 10  # Minimum slices for parallel horizontal regridding
+
+
+def compute_z_from_p(
+    p: np.ndarray,      # (P,) pressure levels [Pa], typically decreasing with height
+    rho: np.ndarray,    # (T, X, Y, P) density [kg/m^3]
+    grav: float,        # gravity [m/s^2]
+) -> np.ndarray:
+    """
+    Convert pressure levels to geometric height at each (t,x,y) using
+    Δz = Δp / (ρ̄ g), where ρ̄ is layer-mean density (trapezoidal in 1/ρ).
+    
+    This function is compatible with the (T, X, Y, P) coordinate ordering
+    used in some atmospheric data processing workflows.
+
+    Returns:
+        z: (T, X, Y, P) height [m], with z[..., 0] = 0 at the bottom level and increasing upward.
+    """
+    # Ensure p is monotonic from bottom (largest p) to top (smallest p)
+    p = np.asarray(p)
+    if p.ndim != 1:
+        raise ValueError("p must be 1D of shape (P,).")
+    if not np.all(np.diff(p) < 0):
+        # sort descending (bottom→top)
+        order = np.argsort(-p)
+        p = p[order]
+        rho = rho[..., order]
+
+    T, X, Y, P = rho.shape
+    if p.shape[0] != P:
+        raise ValueError("rho last dimension must match p length.")
+
+    # Layer thickness Δz_k between p[k] and p[k+1]
+    # Use trapezoid rule on 1/rho:  1/ρ̄ ≈ 0.5*(1/ρ_k + 1/ρ_{k+1})
+    inv_rho = 1.0 / rho
+    inv_rho_mid = 0.5 * (inv_rho[..., :-1] + inv_rho[..., 1:]) # (T,X,Y,P-1)
+    dp = (p[:-1] - p[1:])[None, None, None, :]                 # (1,1,1,P-1), positive if p decreases upward
+    dz_layers = (dp * inv_rho_mid) / grav                      # (T,X,Y,P-1)
+
+    # z at full levels with z[...,0] = 0 (relative to bottom)
+    z = np.zeros((T, X, Y, P), dtype=rho.dtype)
+    z[..., 1:] = np.cumsum(dz_layers, axis=-1)
+    return z
 
 
 def compute_dz_from_plev(
@@ -167,11 +217,50 @@ def latlon_to_xy(
     return Y, X
 
 
+def _vertical_interp_single_column(args):
+    """
+    Helper function for parallel vertical interpolation of a single column.
+    
+    Args:
+        args: Tuple of (index, z_col, v_col, z_out)
+        
+    Returns:
+        Tuple of (index, interpolated_values, extrapolation_detected)
+    """
+    i, zc, vc, z_out = args
+    
+    # Require strictly increasing z for np.interp
+    # If any non-monotonic segments (rare, but can happen), we sort by z
+    order = np.argsort(zc)
+    z_sorted = zc[order]
+    v_sorted = vc[order]
+    
+    # Remove duplicates in z (if any)
+    mask = np.diff(z_sorted, prepend=z_sorted[0]-1) > 0
+    z_sorted = z_sorted[mask]
+    v_sorted = v_sorted[mask]
+    
+    extrapolation_detected = False
+    if z_sorted.size >= 2:
+        # Check for extrapolation
+        if np.any(z_out < z_sorted[0]) or np.any(z_out > z_sorted[-1]):
+            extrapolation_detected = True
+            
+        # np.interp requires increasing x; clip outside → returns boundary value,
+        # so we post-mask to NaN for true "no extrapolation".
+        vals = np.interp(z_out, z_sorted, v_sorted)
+        vals[(z_out < z_sorted[0]) | (z_out > z_sorted[-1])] = np.nan
+        return (i, vals, extrapolation_detected)
+    else:
+        return (i, np.full(z_out.shape[0], np.nan, dtype=vc.dtype), False)
+
+
 def vertical_interp_to_z(
     z_col: np.ndarray,     # (..., P) heights increasing with level index
     v_col: np.ndarray,     # (..., P) values on same levels
     z_out: np.ndarray,     # (Z,) target heights (monotonic increasing)
     bounds_error: bool = True,  # If True, raise error when extrapolation would occur
+    n_jobs: Optional[int] = None,  # Number of parallel workers (None = auto, 1 = sequential)
 ) -> np.ndarray:
     """
     1D vertical interpolation along the last axis (P→Z) using np.interp per column.
@@ -181,6 +270,7 @@ def vertical_interp_to_z(
         v_col: (..., P) values on same levels
         z_out: (Z,) target heights (monotonic increasing)
         bounds_error: If True, raise error when extrapolation would occur
+        n_jobs: Number of parallel workers (None=auto, 1=sequential, -1=all CPUs)
         
     Returns:
         out: (..., Z) interpolated values
@@ -197,35 +287,61 @@ def vertical_interp_to_z(
     z_flat = z_col.reshape(-1, P)
     v_flat = v_col.reshape(-1, P)
     out_flat = out.reshape(-1, Z)
+    
+    n_cols = z_flat.shape[0]
+    
+    # Determine number of jobs
+    if n_jobs is None:
+        # Auto: Use parallelization only if we have enough columns to make it worthwhile
+        n_jobs = min(cpu_count(), max(1, n_cols // _VERTICAL_INTERP_PARALLEL_THRESHOLD)) if n_cols > _VERTICAL_INTERP_PARALLEL_THRESHOLD else 1
+    elif n_jobs == -1:
+        n_jobs = cpu_count()
+    elif n_jobs < 1:
+        n_jobs = 1
 
     extrapolation_detected = False
-    for i in range(z_flat.shape[0]):
-        zc = z_flat[i]
-        vc = v_flat[i]
+    
+    if n_jobs == 1:
+        # Sequential execution
+        for i in range(n_cols):
+            zc = z_flat[i]
+            vc = v_flat[i]
 
-        # Require strictly increasing z for np.interp
-        # If any non-monotonic segments (rare, but can happen), we sort by z
-        order = np.argsort(zc)
-        z_sorted = zc[order]
-        v_sorted = vc[order]
+            # Require strictly increasing z for np.interp
+            # If any non-monotonic segments (rare, but can happen), we sort by z
+            order = np.argsort(zc)
+            z_sorted = zc[order]
+            v_sorted = vc[order]
 
-        # Remove duplicates in z (if any)
-        mask = np.diff(z_sorted, prepend=z_sorted[0]-1) > 0
-        z_sorted = z_sorted[mask]
-        v_sorted = v_sorted[mask]
+            # Remove duplicates in z (if any)
+            mask = np.diff(z_sorted, prepend=z_sorted[0]-1) > 0
+            z_sorted = z_sorted[mask]
+            v_sorted = v_sorted[mask]
 
-        if z_sorted.size >= 2:
-            # Check for extrapolation
-            if np.any(z_out < z_sorted[0]) or np.any(z_out > z_sorted[-1]):
-                extrapolation_detected = True
-                
-            # np.interp requires increasing x; clip outside → returns boundary value,
-            # so we post-mask to NaN for true "no extrapolation".
-            vals = np.interp(z_out, z_sorted, v_sorted)
-            vals[(z_out < z_sorted[0]) | (z_out > z_sorted[-1])] = np.nan
+            if z_sorted.size >= 2:
+                # Check for extrapolation
+                if np.any(z_out < z_sorted[0]) or np.any(z_out > z_sorted[-1]):
+                    extrapolation_detected = True
+                    
+                # np.interp requires increasing x; clip outside → returns boundary value,
+                # so we post-mask to NaN for true "no extrapolation".
+                vals = np.interp(z_out, z_sorted, v_sorted)
+                vals[(z_out < z_sorted[0]) | (z_out > z_sorted[-1])] = np.nan
+                out_flat[i] = vals
+            else:
+                out_flat[i] = np.nan
+    else:
+        # Parallel execution
+        args_list = [(i, z_flat[i], v_flat[i], z_out) for i in range(n_cols)]
+        
+        with Pool(processes=n_jobs) as pool:
+            results = pool.map(_vertical_interp_single_column, args_list)
+        
+        # Collect results
+        for i, vals, extrap_detected in results:
             out_flat[i] = vals
-        else:
-            out_flat[i] = np.nan
+            if extrap_detected:
+                extrapolation_detected = True
 
     if bounds_error and extrapolation_detected:
         raise ValueError(
@@ -269,15 +385,8 @@ def horizontal_regrid_xy(
                 f"input y range [{y.min():.2f}, {y.max():.2f}]. Extrapolation is not allowed."
             )
 
-    # Choose interpolation method based on grid size and data quality
-    # Cubic requires at least 4 points per dimension and no NaN values
-    # Note: We check for NaN only if cubic is feasible to avoid unnecessary full array scans
-    method = "linear"  # Default to linear
-    if len(x) >= 4 and len(y) >= 4:
-        # Only check for NaN if we might use cubic interpolation
-        has_nan = np.any(np.isnan(field))
-        if not has_nan:
-            method = "cubic"
+    # Use linear interpolation by default for better performance and stability
+    method = "linear"
     
     interp = RegularGridInterpolator((x, y),
                                      field,
@@ -300,6 +409,31 @@ def horizontal_regrid_xy(
     return Fo
 
 
+def _regrid_horizontal_slice(args):
+    """
+    Helper function for parallel horizontal regridding of a single (time, height) slice.
+    
+    Args:
+        args: Tuple of (ti, zi, slab, X_coord, Y_coord, x3f_shifted, x2f_shifted, bounds_error)
+        
+    Returns:
+        Tuple of (ti, zi, regridded_slab)
+    """
+    ti, zi, slab, X_coord, Y_coord, x3f_shifted, x2f_shifted, bounds_error = args
+    
+    # Skip if the slab is all NaNs (e.g., height level above all data)
+    if np.all(np.isnan(slab)):
+        return (ti, zi, None)
+    
+    # Note: horizontal_regrid_xy expects (X, Y) order, so we transpose
+    slab_t = slab.T  # (Lon, Lat) -> (X, Y) ordering
+    result = horizontal_regrid_xy(
+        X_coord, Y_coord, slab_t, x3f_shifted, x2f_shifted, bounds_error=bounds_error
+    ).T  # Transpose back to (Y, X)
+    
+    return (ti, zi, result)
+
+
 def regrid_pressure_to_height(
     var_tpll: np.ndarray,      # (T, P, Lat, Lon) variable on pressure-lat-lon grid
     rho_tpll: np.ndarray,      # (T, P, Lat, Lon) air density [kg/m^3]
@@ -314,6 +448,7 @@ def regrid_pressure_to_height(
     planet_radius: float,      # radius of the planet [m]
     bounds_error: bool = True, # If True, raise error when extrapolation would occur
     z_tpll: Optional[np.ndarray] = None,  # (T, P, Lat, Lon) pre-computed heights [m]
+    n_jobs: Optional[int] = None,  # Number of parallel workers (None = auto, 1 = sequential)
 ) -> np.ndarray:
     """
     Complete regridding pipeline from ECMWF ERA5 pressure-lat-lon data to distance grids.
@@ -321,9 +456,9 @@ def regrid_pressure_to_height(
     Steps:
     1. Compute layer thickness from pressure levels and density (or use pre-computed heights)
     2. Add layer thickness to topographic elevation to get heights at pressure levels
-    3. Interpolate variables vertically to uniform height grid
+    3. Interpolate variables vertically to uniform height grid (parallelized)
     4. Convert lat/lon to local Cartesian coordinates (Y, X)
-    5. Interpolate horizontally to desired output grid, matching centers
+    5. Interpolate horizontally to desired output grid, matching centers (parallelized)
     
     Args:
         var_tpll: (T, P, Lat, Lon) variable on pressure-lat-lon grid
@@ -341,6 +476,7 @@ def regrid_pressure_to_height(
         z_tpll: Optional pre-computed (T, P, Lat, Lon) heights [m]. If provided,
                 skips height computation (Steps 1-2) for efficiency when regridding
                 multiple variables. Compute once using compute_height_grid().
+        n_jobs: Number of parallel workers (None=auto, 1=sequential, -1=all CPUs)
         
     Returns:
         var_tzyx: (T, Z, Y, X) variable on distance grids
@@ -349,10 +485,10 @@ def regrid_pressure_to_height(
         ValueError: If output domain exceeds input domain when bounds_error=True
         
     Example:
-        >>> # Efficient regridding of multiple variables
+        >>> # Efficient regridding of multiple variables with parallelization
         >>> z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
-        >>> temp_tzyx = regrid_pressure_to_height(temp_tpll, ..., z_tpll=z_tpll)
-        >>> humid_tzyx = regrid_pressure_to_height(humid_tpll, ..., z_tpll=z_tpll)
+        >>> temp_tzyx = regrid_pressure_to_height(temp_tpll, ..., z_tpll=z_tpll, n_jobs=-1)
+        >>> humid_tzyx = regrid_pressure_to_height(humid_tpll, ..., z_tpll=z_tpll, n_jobs=-1)
     """
     T, P, Lat, Lon = var_tpll.shape
     
@@ -384,8 +520,8 @@ def regrid_pressure_to_height(
     var_tllp = np.moveaxis(var_tpll, 1, -1)  # (T, Lat, Lon, P)
     z_tllp = np.moveaxis(z_tpll, 1, -1)      # (T, Lat, Lon, P)
     
-    # Interpolate vertically
-    var_tllz = vertical_interp_to_z(z_tllp, var_tllp, x1f, bounds_error=bounds_error)  # (T, Lat, Lon, Z)
+    # Interpolate vertically (parallelized)
+    var_tllz = vertical_interp_to_z(z_tllp, var_tllp, x1f, bounds_error=bounds_error, n_jobs=n_jobs)  # (T, Lat, Lon, Z)
     
     # Step 4: Convert lat/lon to local Cartesian coordinates
     lat_center = 0.5 * (lats[0] + lats[-1])
@@ -419,32 +555,193 @@ def regrid_pressure_to_height(
                 f"Interpolated domain must be embedded within or equal to original domain."
             )
     
-    # Step 6: Horizontal interpolation for each time and height level
-    # NOTE: These loops could potentially be vectorized or parallelized for large datasets.
-    # However, RegularGridInterpolator needs to be instantiated per slice due to
-    # varying NaN patterns at different heights. For typical ERA5 datasets, the
-    # performance is acceptable. Future optimization could use multiprocessing
-    # or joblib for parallel processing of time/height slices.
+    # Step 6: Horizontal interpolation for each time and height level (parallelized)
     Z = len(x1f)
     Y_out = len(x2f)
     X_out = len(x3f)
     var_tzyx = np.full((T, Z, Y_out, X_out), np.nan, dtype=var_tpll.dtype)
     
-    for ti in range(T):
-        for zi in range(Z):
-            slab = var_tllz[ti, :, :, zi]  # (Lat, Lon)
-            
-            # Skip if the slab is all NaNs (e.g., height level above all data)
-            if np.all(np.isnan(slab)):
-                continue
-            
-            # Note: horizontal_regrid_xy expects (X, Y) order, so we transpose
-            slab_t = slab.T  # (Lon, Lat) -> (X, Y) ordering
-            var_tzyx[ti, zi, :, :] = horizontal_regrid_xy(
-                X_coord, Y_coord, slab_t, x3f_shifted, x2f_shifted, bounds_error=bounds_error
-            ).T  # Transpose back to (Y, X)
+    # Determine number of jobs for horizontal regridding
+    n_slices = T * Z
+    if n_jobs is None:
+        # Auto: Use parallelization only if we have enough slices to make it worthwhile
+        n_jobs_horiz = min(cpu_count(), max(1, n_slices // _HORIZONTAL_REGRID_PARALLEL_THRESHOLD)) if n_slices > _HORIZONTAL_REGRID_PARALLEL_THRESHOLD else 1
+    elif n_jobs == -1:
+        n_jobs_horiz = cpu_count()
+    elif n_jobs < 1:
+        n_jobs_horiz = 1
+    else:
+        n_jobs_horiz = n_jobs
+    
+    if n_jobs_horiz == 1:
+        # Sequential execution
+        for ti in range(T):
+            for zi in range(Z):
+                slab = var_tllz[ti, :, :, zi]  # (Lat, Lon)
+                
+                # Skip if the slab is all NaNs (e.g., height level above all data)
+                if np.all(np.isnan(slab)):
+                    continue
+                
+                # Note: horizontal_regrid_xy expects (X, Y) order, so we transpose
+                slab_t = slab.T  # (Lon, Lat) -> (X, Y) ordering
+                var_tzyx[ti, zi, :, :] = horizontal_regrid_xy(
+                    X_coord, Y_coord, slab_t, x3f_shifted, x2f_shifted, bounds_error=bounds_error
+                ).T  # Transpose back to (Y, X)
+    else:
+        # Parallel execution
+        args_list = [
+            (ti, zi, var_tllz[ti, :, :, zi], X_coord, Y_coord, x3f_shifted, x2f_shifted, bounds_error)
+            for ti in range(T) for zi in range(Z)
+        ]
+        
+        with Pool(processes=n_jobs_horiz) as pool:
+            results = pool.map(_regrid_horizontal_slice, args_list)
+        
+        # Collect results
+        for ti, zi, result in results:
+            if result is not None:
+                var_tzyx[ti, zi, :, :] = result
     
     return var_tzyx
+
+
+def _regrid_single_variable(args):
+    """
+    Helper function for parallel regridding of a single variable.
+    
+    Args:
+        args: Tuple containing all arguments needed for regrid_pressure_to_height
+        
+    Returns:
+        Tuple of (variable_name, regridded_data)
+    """
+    (var_name, var_tpll, rho_tpll, topo_ll, plev, lats, lons, 
+     x1f, x2f, x3f, planet_grav, planet_radius, bounds_error, z_tpll, n_jobs) = args
+    
+    result = regrid_pressure_to_height(
+        var_tpll, rho_tpll, topo_ll, plev, lats, lons,
+        x1f, x2f, x3f, planet_grav, planet_radius,
+        bounds_error=bounds_error, z_tpll=z_tpll, n_jobs=n_jobs
+    )
+    
+    return (var_name, result)
+
+
+def regrid_multiple_variables(
+    variables: Dict[str, np.ndarray],  # Dictionary of variable_name: (T, P, Lat, Lon) arrays
+    rho_tpll: np.ndarray,              # (T, P, Lat, Lon) air density [kg/m^3]
+    topo_ll: np.ndarray,               # (Lat, Lon) topographic elevation [m]
+    plev: np.ndarray,                  # (P,) pressure levels [Pa]
+    lats: np.ndarray,                  # (Lat,) latitude [degrees]
+    lons: np.ndarray,                  # (Lon,) longitude [degrees]
+    x1f: np.ndarray,                   # (Z,) vertical height coordinate [m]
+    x2f: np.ndarray,                   # (Y,) horizontal Y-coordinate [m]
+    x3f: np.ndarray,                   # (X,) horizontal X-coordinate [m]
+    planet_grav: float,                # gravity constant [m/s^2]
+    planet_radius: float,              # radius of the planet [m]
+    bounds_error: bool = True,         # If True, raise error when extrapolation would occur
+    z_tpll: Optional[np.ndarray] = None,  # (T, P, Lat, Lon) pre-computed heights [m]
+    n_jobs: Optional[int] = None,      # Number of parallel workers (prioritizes across variables)
+) -> Dict[str, np.ndarray]:
+    """
+    Regrid multiple atmospheric variables in parallel for improved performance.
+    
+    This function intelligently distributes parallel workers, prioritizing parallelization
+    across variables first, then within each variable if workers are available.
+    
+    Args:
+        variables: Dictionary mapping variable names to (T, P, Lat, Lon) arrays
+        rho_tpll: (T, P, Lat, Lon) air density [kg/m^3]
+        topo_ll: (Lat, Lon) topographic elevation [m]
+        plev: (P,) pressure levels [Pa], typically decreasing with height
+        lats: (Lat,) latitude array [degrees]
+        lons: (Lon,) longitude array [degrees]
+        x1f: (Z,) vertical height coordinate [m]
+        x2f: (Y,) horizontal Y-coordinate [m]
+        x3f: (X,) horizontal X-coordinate [m]
+        planet_grav: gravity constant [m/s^2]
+        planet_radius: radius of the planet [m]
+        bounds_error: If True, raise error when extrapolation would occur
+        z_tpll: Optional pre-computed (T, P, Lat, Lon) heights [m]. If None,
+                heights are computed once and reused for all variables.
+        n_jobs: Number of parallel workers. None=auto (uses all CPUs), 1=sequential,
+                -1=all CPUs. The system prioritizes parallelizing across variables first,
+                then within each variable if workers are available.
+        
+    Returns:
+        Dictionary mapping variable names to regridded (T, Z, Y, X) arrays
+        
+    Raises:
+        ValueError: If output domain exceeds input domain when bounds_error=True
+        
+    Example:
+        >>> # Regrid multiple variables efficiently
+        >>> variables = {
+        ...     'temperature': temp_tpll,
+        ...     'humidity': humid_tpll,
+        ...     'pressure': press_tpll,
+        ... }
+        >>> results = regrid_multiple_variables(
+        ...     variables, rho_tpll, topo_ll, plev, lats, lons,
+        ...     x1f, x2f, x3f, planet_grav, planet_radius,
+        ...     n_jobs=-1  # Use all CPUs (prioritizes across variables)
+        ... )
+        >>> temp_tzyx = results['temperature']
+        >>> humid_tzyx = results['humidity']
+    """
+    # Compute heights once if not provided
+    if z_tpll is None:
+        z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+    
+    # Determine parallelization strategy: prioritize across variables first
+    n_vars = len(variables)
+    
+    # Determine total available workers
+    if n_jobs is None or n_jobs == -1:
+        total_workers = cpu_count()
+    elif n_jobs < 1:
+        total_workers = 1
+    else:
+        total_workers = n_jobs
+    
+    # Allocate workers: prioritize across variables
+    if n_vars > 1:
+        # Use workers for variable parallelization first
+        n_jobs_vars = min(total_workers, n_vars)
+        # When parallelizing across variables, we cannot nest parallelization
+        # within each variable due to multiprocessing daemon process limitations
+        n_jobs_per_var = 1
+    else:
+        # Single variable: use all workers within the variable
+        n_jobs_vars = 1
+        n_jobs_per_var = total_workers
+    
+    # If only one variable or sequential processing, use simple loop
+    if n_jobs_vars == 1 or n_vars == 1:
+        results = {}
+        for var_name, var_tpll in variables.items():
+            results[var_name] = regrid_pressure_to_height(
+                var_tpll, rho_tpll, topo_ll, plev, lats, lons,
+                x1f, x2f, x3f, planet_grav, planet_radius,
+                bounds_error=bounds_error, z_tpll=z_tpll, n_jobs=n_jobs_per_var
+            )
+        return results
+    
+    # Parallel processing across variables
+    args_list = [
+        (var_name, var_tpll, rho_tpll, topo_ll, plev, lats, lons,
+         x1f, x2f, x3f, planet_grav, planet_radius, bounds_error, z_tpll, n_jobs_per_var)
+        for var_name, var_tpll in variables.items()
+    ]
+    
+    with Pool(processes=n_jobs_vars) as pool:
+        results_list = pool.map(_regrid_single_variable, args_list)
+    
+    # Convert list of tuples back to dictionary
+    results = {var_name: result for var_name, result in results_list}
+    
+    return results
 
 
 def regrid_topography(
@@ -516,6 +813,88 @@ def regrid_topography(
     ).T  # Transpose back to (Y, X)
     
     return topo_yx
+
+
+def regrid_txyz_from_txyp(
+    data_txyp: np.ndarray,  # (T, X, Y, P) variable on (t,x,y,p)
+    z_txyp: np.ndarray,     # (T, X, Y, P) height at (t,x,y,p)
+    inp_coord: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    out_coord: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    grav: float,
+    n_jobs: Optional[int] = None,  # Number of parallel workers (None = auto, 1 = sequential)
+    ) -> np.ndarray:
+    """
+    Full pipeline: (t,x,y,p) → compute z(t,x,y,p) → interpolate vertically to z'
+    → horizontally to (x',y') for each (t,z'). Both steps are parallelized.
+    
+    This function is compatible with the (T, X, Y, P) coordinate ordering
+    used in some atmospheric data processing workflows.
+
+    Args:
+        data_txyp: (T, X, Y, P) variable on (t,x,y,p)
+        z_txyp: (T, X, Y, P) height at (t,x,y,p)
+        inp_coord: Tuple of (t, x, y, p) coordinate arrays
+        out_coord: Tuple of (x_out, y_out, z_out) coordinate arrays
+        grav: Gravity constant [m/s^2]
+        n_jobs: Number of parallel workers (None=auto, 1=sequential, -1=all CPUs)
+
+    Returns:
+        data_txyz: (T, X', Y', Z') on (t, x', y', z')
+    """
+    t, x, y, p = inp_coord
+    x_out, y_out, z_out = out_coord
+
+    T, X, Y, P = data_txyp.shape
+    if z_txyp.shape != data_txyp.shape:
+        raise ValueError("z_txyp must have the same shape as data_txyp (T,X,Y,P).")
+
+    # (1) Vertical interpolation to z' per (t,x,y) column (parallelized)
+    #     Output shape: (T, X, Y, Z)
+    data_txyz_on_orig_xy = vertical_interp_to_z(z_txyp, data_txyp, z_out, bounds_error=False, n_jobs=n_jobs)  # (T,X,Y,Z)
+
+    # (2) Horizontal regrid for each (t,z') slice (parallelized)
+    Xo, Yo, Zo = len(x_out), len(y_out), len(z_out)
+    data_txyz = np.full((T, Xo, Yo, Zo), np.nan, dtype=data_txyp.dtype)
+    
+    # Determine number of jobs for horizontal regridding
+    n_slices = T * Zo
+    if n_jobs is None:
+        # Auto: Use parallelization only if we have enough slices to make it worthwhile
+        n_jobs_horiz = min(cpu_count(), max(1, n_slices // _HORIZONTAL_REGRID_PARALLEL_THRESHOLD)) if n_slices > _HORIZONTAL_REGRID_PARALLEL_THRESHOLD else 1
+    elif n_jobs == -1:
+        n_jobs_horiz = cpu_count()
+    elif n_jobs < 1:
+        n_jobs_horiz = 1
+    else:
+        n_jobs_horiz = n_jobs
+
+    if n_jobs_horiz == 1:
+        # Sequential execution
+        for ti in range(T):
+            for zi in range(Zo):
+                slab = data_txyz_on_orig_xy[ti, :, :, zi]   # (X, Y)
+                data_txyz[ti, :, :, zi] = horizontal_regrid_xy(x, y, slab, x_out, y_out, bounds_error=False)
+    else:
+        # Parallel execution
+        # Need a helper function that also accepts bounds_error parameter
+        def _regrid_horizontal_slice_simple(args):
+            ti, zi, slab, x, y, x_out, y_out = args
+            result = horizontal_regrid_xy(x, y, slab, x_out, y_out, bounds_error=False)
+            return (ti, zi, result)
+        
+        args_list = [
+            (ti, zi, data_txyz_on_orig_xy[ti, :, :, zi], x, y, x_out, y_out)
+            for ti in range(T) for zi in range(Zo)
+        ]
+        
+        with Pool(processes=n_jobs_horiz) as pool:
+            results = pool.map(_regrid_horizontal_slice_simple, args_list)
+        
+        # Collect results
+        for ti, zi, result in results:
+            data_txyz[ti, :, :, zi] = result
+
+    return data_txyz
 
 
 def save_regridded_data_to_netcdf(
