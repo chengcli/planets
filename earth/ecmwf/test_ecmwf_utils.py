@@ -20,18 +20,7 @@ sys.modules['cdsapi'] = MagicMock()
 sys.modules['xarray'] = MagicMock()
 sys.modules['netCDF4'] = MagicMock()
 
-from ecmwf_utils import (
-    validate_date_format,
-    validate_region_bounds,
-    validate_pressure_levels,
-    validate_variable_names,
-    add_common_arguments,
-    generate_date_list,
-    fetch_single_day,
-    STANDARD_PRESSURE_LEVELS,
-    STANDARD_TIMES,
-    STANDARD_VARIABLES
-)
+import ecmwf_utils
 
 
 class TestValidateDateFormat(unittest.TestCase):
@@ -39,19 +28,19 @@ class TestValidateDateFormat(unittest.TestCase):
     
     def test_valid_date_formats(self):
         """Test valid date formats."""
-        self.assertTrue(validate_date_format("2024-01-01"))
-        self.assertTrue(validate_date_format("2023-12-31"))
-        self.assertTrue(validate_date_format("2024-02-29"))  # Leap year
-        self.assertTrue(validate_date_format("2020-06-15"))
+        self.assertTrue(ecmwf_utils.validate_date_format("2024-01-01"))
+        self.assertTrue(ecmwf_utils.validate_date_format("2023-12-31"))
+        self.assertTrue(ecmwf_utils.validate_date_format("2024-02-29"))  # Leap year
+        self.assertTrue(ecmwf_utils.validate_date_format("2020-06-15"))
     
     def test_invalid_date_formats(self):
         """Test invalid date formats."""
-        self.assertFalse(validate_date_format("2024/01/01"))
-        self.assertFalse(validate_date_format("01-01-2024"))
-        self.assertFalse(validate_date_format("2024-13-01"))  # Invalid month
-        self.assertFalse(validate_date_format("2024-01-32"))  # Invalid day
-        self.assertFalse(validate_date_format("not-a-date"))
-        self.assertFalse(validate_date_format(""))
+        self.assertFalse(ecmwf_utils.validate_date_format("2024/01/01"))
+        self.assertFalse(ecmwf_utils.validate_date_format("01-01-2024"))
+        self.assertFalse(ecmwf_utils.validate_date_format("2024-13-01"))  # Invalid month
+        self.assertFalse(ecmwf_utils.validate_date_format("2024-01-32"))  # Invalid day
+        self.assertFalse(ecmwf_utils.validate_date_format("not-a-date"))
+        self.assertFalse(ecmwf_utils.validate_date_format(""))
 
 
 class TestValidateRegionBounds(unittest.TestCase):
@@ -60,50 +49,50 @@ class TestValidateRegionBounds(unittest.TestCase):
     def test_valid_bounds(self):
         """Test valid geographical bounds."""
         # Should not raise exception
-        validate_region_bounds(30.0, 40.0, -110.0, -100.0)
-        validate_region_bounds(-90.0, 90.0, -180.0, 180.0)  # Full globe
-        validate_region_bounds(0.0, 1.0, 0.0, 1.0)
+        ecmwf_utils.validate_region_bounds(30.0, 40.0, -110.0, -100.0)
+        ecmwf_utils.validate_region_bounds(-90.0, 90.0, -180.0, 180.0)  # Full globe
+        ecmwf_utils.validate_region_bounds(0.0, 1.0, 0.0, 1.0)
     
     def test_invalid_latitude_range(self):
         """Test invalid latitude values."""
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(-100.0, 40.0, -110.0, -100.0)
+            ecmwf_utils.validate_region_bounds(-100.0, 40.0, -110.0, -100.0)
         self.assertIn("Latitude must be between -90 and 90", str(context.exception))
         
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(30.0, 100.0, -110.0, -100.0)
+            ecmwf_utils.validate_region_bounds(30.0, 100.0, -110.0, -100.0)
         self.assertIn("Latitude must be between -90 and 90", str(context.exception))
     
     def test_invalid_longitude_range(self):
         """Test invalid longitude values."""
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(30.0, 40.0, -200.0, -100.0)
+            ecmwf_utils.validate_region_bounds(30.0, 40.0, -200.0, -100.0)
         self.assertIn("Longitude must be between -180 and 180", str(context.exception))
         
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(30.0, 40.0, -110.0, 200.0)
+            ecmwf_utils.validate_region_bounds(30.0, 40.0, -110.0, 200.0)
         self.assertIn("Longitude must be between -180 and 180", str(context.exception))
     
     def test_reversed_latitude(self):
         """Test that latmin must be less than latmax."""
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(40.0, 30.0, -110.0, -100.0)
+            ecmwf_utils.validate_region_bounds(40.0, 30.0, -110.0, -100.0)
         self.assertIn("latmin must be less than latmax", str(context.exception))
     
     def test_reversed_longitude(self):
         """Test that lonmin must be less than lonmax."""
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(30.0, 40.0, -100.0, -110.0)
+            ecmwf_utils.validate_region_bounds(30.0, 40.0, -100.0, -110.0)
         self.assertIn("lonmin must be less than lonmax", str(context.exception))
     
     def test_equal_bounds(self):
         """Test that equal bounds are invalid."""
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(30.0, 30.0, -110.0, -100.0)
+            ecmwf_utils.validate_region_bounds(30.0, 30.0, -110.0, -100.0)
         self.assertIn("latmin must be less than latmax", str(context.exception))
         
         with self.assertRaises(ValueError) as context:
-            validate_region_bounds(30.0, 40.0, -110.0, -110.0)
+            ecmwf_utils.validate_region_bounds(30.0, 40.0, -110.0, -110.0)
         self.assertIn("lonmin must be less than lonmax", str(context.exception))
 
 
@@ -112,27 +101,27 @@ class TestValidatePressureLevels(unittest.TestCase):
     
     def test_valid_pressure_levels(self):
         """Test valid pressure levels."""
-        result = validate_pressure_levels([1000, 850, 500])
+        result = ecmwf_utils.validate_pressure_levels([1000, 850, 500])
         self.assertEqual(result, ['1000', '850', '500'])
         
-        result = validate_pressure_levels([1, 2, 3, 5])
+        result = ecmwf_utils.validate_pressure_levels([1, 2, 3, 5])
         self.assertEqual(result, ['1', '2', '3', '5'])
     
     def test_invalid_pressure_level(self):
         """Test invalid pressure level."""
         with self.assertRaises(ValueError) as context:
-            validate_pressure_levels([1000, 999, 500])
+            ecmwf_utils.validate_pressure_levels([1000, 999, 500])
         self.assertIn("Pressure level 999 hPa is not available", str(context.exception))
     
     def test_all_standard_levels(self):
         """Test all standard pressure levels are valid."""
-        result = validate_pressure_levels(STANDARD_PRESSURE_LEVELS)
-        self.assertEqual(len(result), len(STANDARD_PRESSURE_LEVELS))
-        self.assertEqual(result, [str(level) for level in STANDARD_PRESSURE_LEVELS])
+        result = ecmwf_utils.validate_pressure_levels(ecmwf_utils.STANDARD_PRESSURE_LEVELS)
+        self.assertEqual(len(result), len(ecmwf_utils.STANDARD_PRESSURE_LEVELS))
+        self.assertEqual(result, [str(level) for level in ecmwf_utils.STANDARD_PRESSURE_LEVELS])
     
     def test_single_level(self):
         """Test single pressure level."""
-        result = validate_pressure_levels([850])
+        result = ecmwf_utils.validate_pressure_levels([850])
         self.assertEqual(result, ['850'])
 
 
@@ -142,20 +131,20 @@ class TestValidateVariableNames(unittest.TestCase):
     def test_valid_variables(self):
         """Test valid variable names."""
         # Should not raise exception
-        validate_variable_names(['temperature'])
-        validate_variable_names(['temperature', 'u_component_of_wind'])
-        validate_variable_names(['specific_humidity', 'relative_humidity'])
+        ecmwf_utils.validate_variable_names(['temperature'])
+        ecmwf_utils.validate_variable_names(['temperature', 'u_component_of_wind'])
+        ecmwf_utils.validate_variable_names(['specific_humidity', 'relative_humidity'])
     
     def test_invalid_variable(self):
         """Test invalid variable name."""
         with self.assertRaises(ValueError) as context:
-            validate_variable_names(['invalid_variable'])
+            ecmwf_utils.validate_variable_names(['invalid_variable'])
         self.assertIn("Variable 'invalid_variable' is not available", str(context.exception))
     
     def test_all_standard_variables(self):
         """Test all standard variables are valid."""
         # Should not raise exception
-        validate_variable_names(STANDARD_VARIABLES)
+        ecmwf_utils.validate_variable_names(ecmwf_utils.STANDARD_VARIABLES)
     
     def test_dynamics_variables(self):
         """Test dynamics variable names."""
@@ -169,7 +158,7 @@ class TestValidateVariableNames(unittest.TestCase):
             'potential_vorticity',
             'geopotential',
         ]
-        validate_variable_names(dynamics_vars)
+        ecmwf_utils.validate_variable_names(dynamics_vars)
     
     def test_density_variables(self):
         """Test density variable names."""
@@ -182,7 +171,7 @@ class TestValidateVariableNames(unittest.TestCase):
             'fraction_of_cloud_cover',
             'relative_humidity'
         ]
-        validate_variable_names(density_vars)
+        ecmwf_utils.validate_variable_names(density_vars)
 
 
 class TestAddCommonArguments(unittest.TestCase):
@@ -192,7 +181,7 @@ class TestAddCommonArguments(unittest.TestCase):
         """Test that common arguments are added to parser."""
         import argparse
         parser = argparse.ArgumentParser()
-        parser = add_common_arguments(parser)
+        parser = ecmwf_utils.add_common_arguments(parser)
         
         # Parse with valid arguments
         args = parser.parse_args([
@@ -217,7 +206,7 @@ class TestAddCommonArguments(unittest.TestCase):
         """Test optional arguments."""
         import argparse
         parser = argparse.ArgumentParser()
-        parser = add_common_arguments(parser)
+        parser = ecmwf_utils.add_common_arguments(parser)
         
         args = parser.parse_args([
             '--latmin', '30.0',
@@ -245,34 +234,34 @@ class TestGenerateDateList(unittest.TestCase):
     
     def test_single_day(self):
         """Test generating list for single day."""
-        dates = generate_date_list('2024-01-01', '2024-01-01')
+        dates = ecmwf_utils.generate_date_list('2024-01-01', '2024-01-01')
         self.assertEqual(dates, ['2024-01-01'])
     
     def test_multiple_days(self):
         """Test generating list for multiple days."""
-        dates = generate_date_list('2024-01-01', '2024-01-03')
+        dates = ecmwf_utils.generate_date_list('2024-01-01', '2024-01-03')
         self.assertEqual(dates, ['2024-01-01', '2024-01-02', '2024-01-03'])
     
     def test_week_range(self):
         """Test generating list for a week."""
-        dates = generate_date_list('2024-01-01', '2024-01-07')
+        dates = ecmwf_utils.generate_date_list('2024-01-01', '2024-01-07')
         self.assertEqual(len(dates), 7)
         self.assertEqual(dates[0], '2024-01-01')
         self.assertEqual(dates[-1], '2024-01-07')
     
     def test_month_boundary(self):
         """Test generating list across month boundary."""
-        dates = generate_date_list('2024-01-30', '2024-02-02')
+        dates = ecmwf_utils.generate_date_list('2024-01-30', '2024-02-02')
         self.assertEqual(dates, ['2024-01-30', '2024-01-31', '2024-02-01', '2024-02-02'])
     
     def test_year_boundary(self):
         """Test generating list across year boundary."""
-        dates = generate_date_list('2023-12-30', '2024-01-02')
+        dates = ecmwf_utils.generate_date_list('2023-12-30', '2024-01-02')
         self.assertEqual(dates, ['2023-12-30', '2023-12-31', '2024-01-01', '2024-01-02'])
     
     def test_leap_year(self):
         """Test generating list including leap day."""
-        dates = generate_date_list('2024-02-28', '2024-03-01')
+        dates = ecmwf_utils.generate_date_list('2024-02-28', '2024-03-01')
         self.assertEqual(dates, ['2024-02-28', '2024-02-29', '2024-03-01'])
 
 
@@ -295,7 +284,7 @@ class TestFetchSingleDay(unittest.TestCase):
         expected_file = os.path.join(self.temp_dir, 'era5_20240101.nc')
         self.api.fetch_weather_data.return_value = expected_file
         
-        result = fetch_single_day(
+        result = ecmwf_utils.fetch_single_day(
             api=self.api,
             date_str='2024-01-01',
             variables=['temperature'],
@@ -328,7 +317,7 @@ class TestFetchSingleDay(unittest.TestCase):
         expected_file = os.path.join(self.temp_dir, 'custom_prefix_20240115.nc')
         self.api.fetch_weather_data.return_value = expected_file
         
-        result = fetch_single_day(
+        result = ecmwf_utils.fetch_single_day(
             api=self.api,
             date_str='2024-01-15',
             variables=['temperature'],
@@ -355,7 +344,7 @@ class TestFetchSingleDay(unittest.TestCase):
         # Mock API failure
         self.api.fetch_weather_data.side_effect = RuntimeError("API error")
         
-        result = fetch_single_day(
+        result = ecmwf_utils.fetch_single_day(
             api=self.api,
             date_str='2024-01-01',
             variables=['temperature'],
@@ -379,7 +368,7 @@ class TestFetchSingleDay(unittest.TestCase):
         expected_file = os.path.join(self.temp_dir, 'era5_hourly_densities_20240101.nc')
         self.api.fetch_weather_data.return_value = expected_file
         
-        fetch_single_day(
+        ecmwf_utils.fetch_single_day(
             api=self.api,
             date_str='2024-01-01',
             variables=['specific_humidity'],
@@ -408,7 +397,7 @@ class TestFetchSingleDay(unittest.TestCase):
         
         # Test with different day indices
         for day_idx in range(3):
-            result = fetch_single_day(
+            result = ecmwf_utils.fetch_single_day(
                 api=self.api,
                 date_str='2024-01-01',
                 variables=['temperature'],
@@ -431,34 +420,34 @@ class TestConstants(unittest.TestCase):
     
     def test_standard_pressure_levels_count(self):
         """Test that all 37 standard ERA5 pressure levels are defined."""
-        self.assertEqual(len(STANDARD_PRESSURE_LEVELS), 37)
+        self.assertEqual(len(ecmwf_utils.STANDARD_PRESSURE_LEVELS), 37)
     
     def test_standard_pressure_levels_range(self):
         """Test pressure level range."""
-        self.assertEqual(min(STANDARD_PRESSURE_LEVELS), 1)
-        self.assertEqual(max(STANDARD_PRESSURE_LEVELS), 1000)
+        self.assertEqual(min(ecmwf_utils.STANDARD_PRESSURE_LEVELS), 1)
+        self.assertEqual(max(ecmwf_utils.STANDARD_PRESSURE_LEVELS), 1000)
     
     def test_standard_times_count(self):
         """Test that 4 standard times are defined."""
-        self.assertEqual(len(STANDARD_TIMES), 4)
+        self.assertEqual(len(ecmwf_utils.STANDARD_TIMES), 4)
     
     def test_standard_times_values(self):
         """Test standard time values."""
         expected_times = ['00:00', '06:00', '12:00', '18:00']
-        self.assertEqual(STANDARD_TIMES, expected_times)
+        self.assertEqual(ecmwf_utils.STANDARD_TIMES, expected_times)
     
     def test_standard_variables_coverage(self):
         """Test that both dynamics and density variables are included."""
         # Dynamics variables
-        self.assertIn('temperature', STANDARD_VARIABLES)
-        self.assertIn('u_component_of_wind', STANDARD_VARIABLES)
-        self.assertIn('v_component_of_wind', STANDARD_VARIABLES)
-        self.assertIn('geopotential', STANDARD_VARIABLES)
+        self.assertIn('temperature', ecmwf_utils.STANDARD_VARIABLES)
+        self.assertIn('u_component_of_wind', ecmwf_utils.STANDARD_VARIABLES)
+        self.assertIn('v_component_of_wind', ecmwf_utils.STANDARD_VARIABLES)
+        self.assertIn('geopotential', ecmwf_utils.STANDARD_VARIABLES)
         
         # Density variables
-        self.assertIn('specific_humidity', STANDARD_VARIABLES)
-        self.assertIn('relative_humidity', STANDARD_VARIABLES)
-        self.assertIn('specific_cloud_ice_water_content', STANDARD_VARIABLES)
+        self.assertIn('specific_humidity', ecmwf_utils.STANDARD_VARIABLES)
+        self.assertIn('relative_humidity', ecmwf_utils.STANDARD_VARIABLES)
+        self.assertIn('specific_cloud_ice_water_content', ecmwf_utils.STANDARD_VARIABLES)
 
 
 def run_tests():
