@@ -115,7 +115,7 @@ Note: `len(x1f) = len(x1) + 1`, same for x2f and x3f.
 
 ### Variables
 
-All variables are stored on cell centers with dimensions `(time, x1, x2, x3)`:
+Most variables are stored on cell centers with dimensions `(time, x1, x2, x3)`:
 
 **From dynamics file:**
 - `u`: U component of wind [m/s]
@@ -133,6 +133,11 @@ All variables are stored on cell centers with dimensions `(time, x1, x2, x3)`:
 
 **From density file:**
 - `rho`: Air density [kg/m³]
+
+**Special variable on vertical interfaces:**
+- `pressure_level`: Pressure at cell interfaces [Pa] with dimensions `(time, x1f, x2, x3)`
+
+Note: The `pressure_level` variable is stored at vertical cell interfaces (x1f) rather than centers (x1), making it suitable for flux calculations and boundary conditions in finite volume methods.
 
 ### Metadata
 

@@ -581,6 +581,40 @@ def regrid_era5_to_cartesian(
         print(f"     {var_name}: shape {var_data.shape}, "
               f"range [{np.nanmin(var_data):.3e}, {np.nanmax(var_data):.3e}]")
     
+    # Step 7b: Regrid pressure to cell interfaces
+    print("\n6b. Regridding pressure to vertical cell interfaces...")
+    
+    # Broadcast 1D pressure to 4D (T, P, Lat, Lon)
+    T, P, Lat, Lon = rho_tpll.shape
+    pressure_tpll = np.broadcast_to(plev[np.newaxis, :, np.newaxis, np.newaxis], 
+                                     (T, P, Lat, Lon)).copy()
+    
+    # Regrid pressure to cell interfaces (x1f) instead of centers
+    # Note: x1f has one more element than x1
+    pressure_at_interfaces = regrid_pressure_to_height(
+        pressure_tpll,
+        rho_tpll,
+        topo_ll,
+        plev,
+        lats,
+        lons,
+        x1f,  # Use cell interfaces for vertical coordinate
+        x2,   # Use cell centers for horizontal
+        x3,
+        EARTH_GRAVITY,
+        EARTH_RADIUS,
+        bounds_error=False,
+        z_tpll=z_tpll,
+        n_jobs=-1
+    )
+    
+    # Add to regridded variables with special name
+    regridded_vars['pressure_level'] = pressure_at_interfaces
+    
+    print(f"   Pressure regridded to interfaces: shape {pressure_at_interfaces.shape}")
+    print(f"   Pressure range: [{np.nanmin(pressure_at_interfaces):.1f}, "
+          f"{np.nanmax(pressure_at_interfaces):.1f}] Pa")
+    
     # Step 8: Prepare coordinates for output
     print("\n7. Preparing output NetCDF file...")
     
@@ -631,6 +665,7 @@ def regrid_era5_to_cartesian(
         'cswc': {'units': 'kg kg-1', 'long_name': 'Specific snow water content'},
         'clwc': {'units': 'kg kg-1', 'long_name': 'Specific cloud liquid water content'},
         'crwc': {'units': 'kg kg-1', 'long_name': 'Specific rain water content'},
+        'pressure_level': {'units': 'Pa', 'long_name': 'Pressure at cell interfaces', 'standard_name': 'air_pressure'},
     }
     
     for var_name, var_info in var_metadata.items():
@@ -769,17 +804,32 @@ def save_regridded_data_with_interfaces(
         x3f_var.description = "X coordinate at cell interfaces (boundaries)"
         x3f_var[:] = coordinates['x3f'].astype("f8")
         
-        # Create data variables (on cell centers)
+        # Create data variables
         for var_name, var_data in variables.items():
-            if var_data.shape != (T, Z, Y, X):
-                raise ValueError(
-                    f"Variable '{var_name}' has shape {var_data.shape}, "
-                    f"expected ({T}, {Z}, {Y}, {X})"
-                )
-            
-            var = ncfile.createVariable(var_name, "f4", ("time", "x1", "x2", "x3"),
-                                       zlib=True, complevel=4)
-            var[:] = var_data.astype("f4")
+            # Special handling for pressure_level which is on cell interfaces
+            if var_name == 'pressure_level':
+                # pressure_level is on vertical interfaces: (T, x1f, x2, x3)
+                Zf = Z + 1
+                if var_data.shape != (T, Zf, Y, X):
+                    raise ValueError(
+                        f"Variable '{var_name}' has shape {var_data.shape}, "
+                        f"expected ({T}, {Zf}, {Y}, {X})"
+                    )
+                
+                var = ncfile.createVariable(var_name, "f4", ("time", "x1f", "x2", "x3"),
+                                           zlib=True, complevel=4)
+                var[:] = var_data.astype("f4")
+            else:
+                # Regular variables on cell centers
+                if var_data.shape != (T, Z, Y, X):
+                    raise ValueError(
+                        f"Variable '{var_name}' has shape {var_data.shape}, "
+                        f"expected ({T}, {Z}, {Y}, {X})"
+                    )
+                
+                var = ncfile.createVariable(var_name, "f4", ("time", "x1", "x2", "x3"),
+                                           zlib=True, complevel=4)
+                var[:] = var_data.astype("f4")
             
             # Set variable attributes from metadata
             if f"{var_name}_units" in metadata:
