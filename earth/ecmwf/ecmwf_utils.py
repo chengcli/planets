@@ -99,7 +99,7 @@ def validate_pressure_levels(pressure_levels: List[int]) -> List[str]:
         if level not in STANDARD_PRESSURE_LEVELS:
             raise ValueError(
                 f"Pressure level {level} hPa is not available. "
-                f"Available levels: {self.STANDARD_PRESSURE_LEVELS}"
+                f"Available levels: {STANDARD_PRESSURE_LEVELS}"
             )
     return [str(level) for level in pressure_levels]
 
