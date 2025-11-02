@@ -68,14 +68,14 @@ Variables downloaded:
 
 Examples:
   # Download data for White Sands, New Mexico
-  python fetch_era5_wind_temp.py --latmin 32.0 --latmax 33.5 \\
+  python fetch_era5_hourly_dynamics.py --latmin 32.0 --latmax 33.5 \\
                                  --lonmin -106.8 --lonmax -105.8 \\
                                  --start-date 2024-01-01 \\
                                  --end-date 2024-01-02 \\
                                  --output ./white_sands
 
   # Download data for a larger region with specific times
-  python fetch_era5_wind_temp.py --latmin 30.0 --latmax 40.0 \\
+  python fetch_era5_hourly_dynamics.py --latmin 30.0 --latmax 40.0 \\
                                  --lonmin -120.0 --lonmax -100.0 \\
                                  --start-date 2024-01-01 \\
                                  --end-date 2024-01-03 \\
