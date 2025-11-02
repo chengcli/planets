@@ -1,15 +1,53 @@
 """
 Collection of utility functions for downloading ECMWF weather data.
+
+Functions include:
+    - validate_date_format: Validate date strings.
+    - validate_region_bounds: Validate geographical bounds.
+    - validate_pressure_levels: Validate and convert pressure levels.
+    - validate_variable_names: Validate variable names.
+    - add_common_arguments: Add common command-line arguments to an argparse parser.
+    - generate_date_list: Generate a list of dates between two given dates.
+    - fetch_single_day: Download weather data for a single day using ECMWFWeatherAPI.
 """
 
 import os
 from datetime import datetime, timedelta
 from typing import List, Tuple
-from ecmwf_weather_api import ECMWFWeatherAPI
+
+STANDARD_PRESSURE_LEVELS = [
+    1, 2, 3, 5, 7, 10, 20, 30, 50, 70, 100, 125, 150, 175, 200,
+    225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750,
+    775, 800, 825, 850, 875, 900, 925, 950, 975, 1000
+]
+
+STANDARD_TIMES = [
+    '00:00', '06:00', '12:00', '18:00'
+]
+
+STANDARD_VARIABLES = [
+    # dynamics variables
+    'temperature',
+    'u_component_of_wind',
+    'v_component_of_wind',
+    'vertical_velocity',
+    'divergence',
+    'vorticity',
+    'potential_vorticity',
+    'geopotential',
+    # densit variables
+    'specific_cloud_ice_water_content',
+    'specific_humidity',
+    'specific_snow_water_content',
+    'specific_cloud_liquid_water_content',
+    'specific_rain_water_content',
+    'fraction_of_cloud_cover',
+    'relative_humidity'
+]
 
 ############## Validations ###############
 
-def validate_date_format(date_str: str):
+def validate_date_format(date_str: str) -> bool:
     """Validate date format."""
     try:
         datetime.strptime(date_str, '%Y-%m-%d')
@@ -17,9 +55,75 @@ def validate_date_format(date_str: str):
     except ValueError:
         return False
 
+def validate_region_bounds(
+        latmin: float, latmax: float, 
+        lonmin: float, lonmax: float) -> None:
+    """
+    Validate geographical bounds.
+    
+    Args:
+        latmin: Minimum latitude (-90 to 90).
+        latmax: Maximum latitude (-90 to 90).
+        lonmin: Minimum longitude (-180 to 180).
+        lonmax: Maximum longitude (-180 to 180).
+    
+    Raises:
+        ValueError: If bounds are invalid.
+    """
+    if not (-90 <= latmin <= 90) or not (-90 <= latmax <= 90):
+        raise ValueError(f"Latitude must be between -90 and 90. Got: {latmin}, {latmax}")
+    
+    if latmin >= latmax:
+        raise ValueError(f"latmin must be less than latmax. Got: {latmin} >= {latmax}")
+    
+    if not (-180 <= lonmin <= 180) or not (-180 <= lonmax <= 180):
+        raise ValueError(f"Longitude must be between -180 and 180. Got: {lonmin}, {lonmax}")
+    
+    if lonmin >= lonmax:
+        raise ValueError(f"lonmin must be less than lonmax. Got: {lonmin} >= {lonmax}")
+
+def validate_pressure_levels(pressure_levels: List[int]) -> List[str]:
+    """
+    Validate pressure levels and convert to strings.
+    
+    Args:
+        pressure_levels: List of pressure levels in hPa.
+    
+    Returns:
+        List of pressure levels as strings.
+    
+    Raises:
+        ValueError: If pressure levels are invalid.
+    """
+    for level in pressure_levels:
+        if level not in STANDARD_PRESSURE_LEVELS:
+            raise ValueError(
+                f"Pressure level {level} hPa is not available. "
+                f"Available levels: {self.STANDARD_PRESSURE_LEVELS}"
+            )
+    return [str(level) for level in pressure_levels]
+
+def validate_variable_names(variables: List[str]) -> None:
+    """
+    Validate variable names.
+    
+    Args:
+        variables: List of variable names.
+    
+    Raises:
+        ValueError: If variable names are invalid.
+    """
+    for var in variables:
+        if var not in STANDARD_VARIABLES:
+            raise ValueError(
+                f"Variable '{var}' is not available. "
+                f"Available variables: {STANDARD_VARIABLES}"
+            )
+
 ########### Command Line Arguments ###########
 
 def add_common_arguments(parser):
+    """Add common command-line arguments to the parser."""
     # Required arguments
     parser.add_argument('--latmin', type=float, required=True,
                         help='Minimum latitude (-90 to 90)')
@@ -74,8 +178,7 @@ def generate_date_list(start_date: str, end_date: str):
     
     return dates
 
-def fetch_single_day(
-        api: ECMWFWeatherAPI,
+def fetch_single_day(api,
         date_str: str, 
         variables: List[str],
         pressure_levels: List[int],

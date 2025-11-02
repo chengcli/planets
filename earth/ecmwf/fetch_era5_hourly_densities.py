@@ -194,7 +194,7 @@ def main():
         
         if results:
             print(f"\nDownloaded files:")
-            for date_str, filepath in sorted(results):
+            for filepath in sorted(results):
                 filename = os.path.basename(filepath)
                 print(f"  {filename}")
         
