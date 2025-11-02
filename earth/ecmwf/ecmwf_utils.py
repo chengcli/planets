@@ -13,7 +13,7 @@ Functions include:
 
 import os
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List
 
 STANDARD_PRESSURE_LEVELS = [
     1, 2, 3, 5, 7, 10, 20, 30, 50, 70, 100, 125, 150, 175, 200,
