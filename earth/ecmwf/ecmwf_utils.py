@@ -35,7 +35,7 @@ STANDARD_VARIABLES = [
     'vorticity',
     'potential_vorticity',
     'geopotential',
-    # densit variables
+    # density variables
     'specific_cloud_ice_water_content',
     'specific_humidity',
     'specific_snow_water_content',
