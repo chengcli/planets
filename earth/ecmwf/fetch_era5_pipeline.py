@@ -228,7 +228,7 @@ def calculate_latlon_limits(geometry: Dict) -> Tuple[float, float, float, float]
     
     # Calculate lat-lon extents from the center
     # Y direction corresponds to latitude (north-south)
-    delta_lat_min = y_min / meters_per_degree_lat
+    # delta_lat_min = y_min / meters_per_degree_lat  # Unused variable removed
     delta_lat_max = y_max / meters_per_degree_lat
     
     # X direction corresponds to longitude (east-west)
