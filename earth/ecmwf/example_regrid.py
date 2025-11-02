@@ -245,8 +245,7 @@ def main():
         planet_radius,
         bounds_error=False,
         z_tpll=z_tpll,  # Reuse pre-computed heights
-        n_jobs=1,       # Sequential within each variable (or use None for auto)
-        n_jobs_vars=-1  # Parallelize across variables
+        n_jobs=-1       # Use all CPUs (prioritizes across variables)
     )
     
     print(f"   Regridded {len(results)} variables in parallel")

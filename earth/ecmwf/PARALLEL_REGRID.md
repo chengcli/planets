@@ -220,9 +220,8 @@ results = regrid_multiple_variables(
     variables, rho_tpll, topo_ll,
     plev, lats, lons, x1f, x2f, x3f,
     planet_grav, planet_radius,
-    z_tpll=z_tpll,   # Pre-computed heights (optional)
-    n_jobs=1,        # Sequential within each variable
-    n_jobs_vars=-1   # Parallelize across variables (use all CPUs)
+    z_tpll=z_tpll,  # Pre-computed heights (optional)
+    n_jobs=-1       # Use all CPUs (prioritizes across variables first)
 )
 
 # Access results
@@ -231,11 +230,11 @@ humid_tzyx = results['humidity']
 # ... etc.
 ```
 
-This approach provides two levels of parallelization:
-- **Across variables** (`n_jobs_vars`): Different variables are processed simultaneously
-- **Within variables** (`n_jobs`): Each variable's interpolation is parallelized
+The `n_jobs` parameter intelligently distributes workers:
+- **Prioritizes across variables**: When multiple variables exist, workers are allocated to process different variables in parallel first
+- **Then within variables**: Any remaining workers are distributed to parallelize within each variable's interpolation
 
-For many variables, this can be significantly faster than processing them sequentially!
+For many variables, this approach is significantly faster than processing them sequentially!
 
 ### Example 4: Conservative Resource Usage
 

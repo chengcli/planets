@@ -463,8 +463,7 @@ class TestMultipleVariables(unittest.TestCase):
             x1f, x2f, x3f,
             planet_grav, planet_radius,
             bounds_error=False,
-            n_jobs=1,
-            n_jobs_vars=1
+            n_jobs=1
         )
         
         # Check that all variables are present
@@ -512,8 +511,7 @@ class TestMultipleVariables(unittest.TestCase):
             x1f, x2f, x3f,
             planet_grav, planet_radius,
             bounds_error=False,
-            n_jobs=1,
-            n_jobs_vars=1
+            n_jobs=1
         )
         
         # Parallel variable processing
@@ -524,8 +522,7 @@ class TestMultipleVariables(unittest.TestCase):
             x1f, x2f, x3f,
             planet_grav, planet_radius,
             bounds_error=False,
-            n_jobs=1,
-            n_jobs_vars=n_workers
+            n_jobs=n_workers
         )
         
         # Results should be identical
@@ -572,8 +569,7 @@ class TestMultipleVariables(unittest.TestCase):
             planet_grav, planet_radius,
             bounds_error=False,
             z_tpll=z_tpll,
-            n_jobs=1,
-            n_jobs_vars=1
+            n_jobs=1
         )
         
         # Should complete without errors and have correct shapes

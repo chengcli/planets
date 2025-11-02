@@ -598,15 +598,13 @@ def regrid_multiple_variables(
     planet_radius: float,              # radius of the planet [m]
     bounds_error: bool = True,         # If True, raise error when extrapolation would occur
     z_tpll: Optional[np.ndarray] = None,  # (T, P, Lat, Lon) pre-computed heights [m]
-    n_jobs: Optional[int] = None,      # Number of parallel workers for within-variable parallelization
-    n_jobs_vars: Optional[int] = None, # Number of parallel workers for across-variable parallelization
+    n_jobs: Optional[int] = None,      # Number of parallel workers (prioritizes across variables)
 ) -> Dict[str, np.ndarray]:
     """
     Regrid multiple atmospheric variables in parallel for improved performance.
     
-    This function parallelizes across multiple variables, with each variable also being
-    regridded in parallel internally (if n_jobs != 1). This provides two levels of
-    parallelization for maximum performance when processing multiple variables.
+    This function intelligently distributes parallel workers, prioritizing parallelization
+    across variables first, then within each variable if workers are available.
     
     Args:
         variables: Dictionary mapping variable names to (T, P, Lat, Lon) arrays
@@ -623,10 +621,9 @@ def regrid_multiple_variables(
         bounds_error: If True, raise error when extrapolation would occur
         z_tpll: Optional pre-computed (T, P, Lat, Lon) heights [m]. If None,
                 heights are computed once and reused for all variables.
-        n_jobs: Number of parallel workers for within-variable parallelization
-                (vertical interpolation and horizontal regridding). None=auto, 1=sequential.
-        n_jobs_vars: Number of parallel workers for across-variable parallelization.
-                     None=auto, 1=sequential (process variables one at a time).
+        n_jobs: Number of parallel workers. None=auto (uses all CPUs), 1=sequential,
+                -1=all CPUs. The system prioritizes parallelizing across variables first,
+                then within each variable if workers are available.
         
     Returns:
         Dictionary mapping variable names to regridded (T, Z, Y, X) arrays
@@ -644,8 +641,7 @@ def regrid_multiple_variables(
         >>> results = regrid_multiple_variables(
         ...     variables, rho_tpll, topo_ll, plev, lats, lons,
         ...     x1f, x2f, x3f, planet_grav, planet_radius,
-        ...     n_jobs=1,        # Sequential within each variable
-        ...     n_jobs_vars=-1   # Parallelize across variables
+        ...     n_jobs=-1  # Use all CPUs (prioritizes across variables)
         ... )
         >>> temp_tzyx = results['temperature']
         >>> humid_tzyx = results['humidity']
@@ -654,15 +650,28 @@ def regrid_multiple_variables(
     if z_tpll is None:
         z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
     
-    # Determine number of jobs for variable parallelization
+    # Determine parallelization strategy: prioritize across variables first
     n_vars = len(variables)
-    if n_jobs_vars is None:
-        # Auto: Use parallelization if we have multiple variables
-        n_jobs_vars = min(cpu_count(), n_vars) if n_vars > 1 else 1
-    elif n_jobs_vars == -1:
-        n_jobs_vars = cpu_count()
-    elif n_jobs_vars < 1:
+    
+    # Determine total available workers
+    if n_jobs is None or n_jobs == -1:
+        total_workers = cpu_count()
+    elif n_jobs < 1:
+        total_workers = 1
+    else:
+        total_workers = n_jobs
+    
+    # Allocate workers: prioritize across variables
+    if n_vars > 1:
+        # Use workers for variable parallelization first
+        n_jobs_vars = min(total_workers, n_vars)
+        # When parallelizing across variables, we cannot nest parallelization
+        # within each variable due to multiprocessing daemon process limitations
+        n_jobs_per_var = 1
+    else:
+        # Single variable: use all workers within the variable
         n_jobs_vars = 1
+        n_jobs_per_var = total_workers
     
     # If only one variable or sequential processing, use simple loop
     if n_jobs_vars == 1 or n_vars == 1:
@@ -671,14 +680,14 @@ def regrid_multiple_variables(
             results[var_name] = regrid_pressure_to_height(
                 var_tpll, rho_tpll, topo_ll, plev, lats, lons,
                 x1f, x2f, x3f, planet_grav, planet_radius,
-                bounds_error=bounds_error, z_tpll=z_tpll, n_jobs=n_jobs
+                bounds_error=bounds_error, z_tpll=z_tpll, n_jobs=n_jobs_per_var
             )
         return results
     
     # Parallel processing across variables
     args_list = [
         (var_name, var_tpll, rho_tpll, topo_ll, plev, lats, lons,
-         x1f, x2f, x3f, planet_grav, planet_radius, bounds_error, z_tpll, n_jobs)
+         x1f, x2f, x3f, planet_grav, planet_radius, bounds_error, z_tpll, n_jobs_per_var)
         for var_name, var_tpll in variables.items()
     ]
     
