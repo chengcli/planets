@@ -136,19 +136,33 @@ class TestECMWFWeatherAPI(unittest.TestCase):
         """Test date range parsing."""
         api = ECMWFWeatherAPI(api_key="test-key")
         
-        years, months = api._parse_date_range("2024-01-15", "2024-03-20")
+        years, months, days = api._parse_date_range("2024-01-15", "2024-03-20")
         
         self.assertEqual(years, ['2024'])
         self.assertEqual(months, ['01', '02', '03'])
+        # Days should include all unique day numbers from 01 to 31 that occur in the range
+        # Since the range includes days 15-20 and spans full months, we get unique days 1-31
+        self.assertEqual(len(days), 31)
+        # Verify it includes days like 15, 20
+        self.assertIn('15', days)
+        self.assertIn('20', days)
     
     def test_parse_date_range_multiple_years(self):
         """Test date range parsing across multiple years."""
         api = ECMWFWeatherAPI(api_key="test-key")
         
-        years, months = api._parse_date_range("2023-11-15", "2024-02-20")
+        years, months, days = api._parse_date_range("2023-11-15", "2024-02-20")
         
         self.assertEqual(years, ['2023', '2024'])
         self.assertEqual(sorted(months), ['01', '02', '11', '12'])
+        # Days should include unique day numbers from the range
+        # Range includes days 15-30 (Nov), 1-31 (Dec), 1-31 (Jan), 1-20 (Feb)
+        # Unique days: 1-31 (all possible days in a month)
+        self.assertEqual(len(days), 31)
+        # Verify it includes specific days
+        self.assertIn('15', days)
+        self.assertIn('20', days)
+        self.assertIn('01', days)
     
     def test_parse_date_range_invalid_format(self):
         """Test date range parsing with invalid format."""
@@ -167,6 +181,16 @@ class TestECMWFWeatherAPI(unittest.TestCase):
             api._parse_date_range("2024-03-20", "2024-01-15")
         
         self.assertIn("start_date must be before end_date", str(context.exception))
+    
+    def test_parse_date_range_two_days(self):
+        """Test date range parsing for two consecutive days."""
+        api = ECMWFWeatherAPI(api_key="test-key")
+        
+        years, months, days = api._parse_date_range("2024-01-01", "2024-01-02")
+        
+        self.assertEqual(years, ['2024'])
+        self.assertEqual(months, ['01'])
+        self.assertEqual(days, ['01', '02'])
     
     def test_fetch_weather_data(self):
         """Test fetching weather data."""

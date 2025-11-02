@@ -27,7 +27,7 @@ Usage:
 import os
 import logging
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import tempfile
 
 try:
@@ -188,16 +188,16 @@ class ECMWFWeatherAPI:
                 )
         return [str(level) for level in pressure_levels]
     
-    def _parse_date_range(self, start_date: str, end_date: str) -> Tuple[List[str], List[str]]:
+    def _parse_date_range(self, start_date: str, end_date: str) -> Tuple[List[str], List[str], List[str]]:
         """
-        Parse date range and generate list of years and months.
+        Parse date range and generate list of years, months, and days.
         
         Args:
             start_date: Start date in format 'YYYY-MM-DD'.
             end_date: End date in format 'YYYY-MM-DD'.
         
         Returns:
-            Tuple of (years, months) as lists of strings.
+            Tuple of (years, months, days) as lists of strings.
         
         Raises:
             ValueError: If dates are invalid or in wrong format.
@@ -213,20 +213,19 @@ class ECMWFWeatherAPI:
         if start_dt > end_dt:
             raise ValueError(f"start_date must be before end_date. Got: {start_date} > {end_date}")
         
-        # Generate list of years and months
+        # Generate list of years, months, and days for the actual date range
         years = set()
         months = set()
+        days = set()
+        
         current = start_dt
         while current <= end_dt:
             years.add(str(current.year))
             months.add(f"{current.month:02d}")
-            # Move to next month
-            if current.month == 12:
-                current = current.replace(year=current.year + 1, month=1)
-            else:
-                current = current.replace(month=current.month + 1)
+            days.add(f"{current.day:02d}")
+            current += timedelta(days=1)
         
-        return sorted(list(years)), sorted(list(months))
+        return sorted(list(years)), sorted(list(months)), sorted(list(days))
     
     def fetch_weather_data(
         self,
@@ -282,7 +281,7 @@ class ECMWFWeatherAPI:
         # Validate and normalize inputs
         pressure_level_strs = self._validate_pressure_levels(pressure_levels)
         variables = self._normalize_variable_names(variables)
-        years, months = self._parse_date_range(start_date, end_date)
+        years, months, days = self._parse_date_range(start_date, end_date)
         
         # Set default times if not provided (every 6 hours)
         if times is None:
@@ -303,7 +302,7 @@ class ECMWFWeatherAPI:
             'pressure_level': pressure_level_strs,
             'year': years,
             'month': months,
-            'day': [f"{day:02d}" for day in range(1, 32)],  # All days, CDS will filter
+            'day': days,
             'time': times,
             'area': [latmax, lonmin, latmin, lonmax],  # [North, West, South, East]
         }
