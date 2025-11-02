@@ -11,7 +11,7 @@ import os
 import tempfile
 import yaml
 import subprocess
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))
