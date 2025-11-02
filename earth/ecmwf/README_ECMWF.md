@@ -288,12 +288,62 @@ Run it with:
 python example_ecmwf_usage.py
 ```
 
+## Convenience Scripts
+
+Two convenient scripts are provided for common download tasks:
+
+### 1. Download Wind and Temperature (`download_era5_wind_temp.py`)
+
+Downloads temperature, u-component of wind, and v-component of wind at all 37 standard ERA5 pressure levels.
+
+**Usage:**
+```bash
+python download_era5_wind_temp.py \
+    --latmin 32.0 --latmax 33.5 \
+    --lonmin -106.8 --lonmax -105.8 \
+    --start-date 2024-01-01 \
+    --end-date 2024-01-02 \
+    --output wind_temp_data.nc
+```
+
+**Optional arguments:**
+- `--times`: Specify particular times (e.g., `--times 00:00 12:00`)
+- `--api-key`: Provide API key directly
+- `--api-url`: Specify custom API URL
+
+### 2. Download Density Variables (`download_era5_density_vars.py`)
+
+Downloads density-related variables at all 37 standard ERA5 pressure levels:
+1. Specific cloud ice water content
+2. Specific humidity
+3. Specific snow water content
+4. Specific cloud liquid water content
+5. Specific rain water content
+
+**Usage:**
+```bash
+python download_era5_density_vars.py \
+    --latmin 32.0 --latmax 33.5 \
+    --lonmin -106.8 --lonmax -105.8 \
+    --start-date 2024-01-01 \
+    --end-date 2024-01-02 \
+    --output density_data.nc
+```
+
+**Optional arguments:**
+- `--times`: Specify particular times (e.g., `--times 00:00 12:00`)
+- `--api-key`: Provide API key directly
+- `--api-url`: Specify custom API URL
+
+**Note:** Both scripts download data at all 37 standard ERA5 pressure levels (1, 2, 3, 5, 7, 10, 20, 30, 50, 70, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000 hPa).
+
 ## Testing
 
 Run the test suite:
 
 ```bash
 python test_ecmwf_weather_api.py
+python test_download_scripts.py
 ```
 
 The tests include:
@@ -302,6 +352,8 @@ The tests include:
 - Variable name normalization
 - Mock data fetching (no actual API calls)
 - Data loading functionality
+- Convenience script argument parsing and validation
+- Correct variable names in convenience scripts
 
 ## Error Handling
 
