@@ -5,7 +5,6 @@ This module provides functions to regrid ECMWF ERA5 data from pressure-lat-lon
 grids to uniform Cartesian distance grids (height-Y-X) for atmospheric modeling.
 
 Functions:
-    compute_z_from_p: Convert pressure levels to height (T,X,Y,P ordering)
     compute_dz_from_plev: Compute layer thickness from pressure levels
     compute_heights_from_dz: Compute absolute heights from layer thickness and topography
     compute_height_grid: Compute height grid once for reuse with multiple variables
@@ -15,7 +14,6 @@ Functions:
     regrid_pressure_to_height: Complete pipeline from (T,P,Lat,Lon) to (T,Z,Y,X)
     regrid_multiple_variables: Regrid multiple variables in parallel for improved performance
     regrid_topography: Regrid topographic elevation to distance grids
-    regrid_txyz_from_txyp: Full pipeline from (T,X,Y,P) to (T,X',Y',Z')
     save_regridded_data_to_netcdf: Save regridded atmospheric data to NetCDF with metadata
     save_topography_to_netcdf: Save regridded topography to NetCDF with metadata
 """
