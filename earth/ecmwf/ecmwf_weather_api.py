@@ -329,7 +329,7 @@ class ECMWFWeatherAPI:
             if request_id:
                 logger.info(f"Request ID: {request_id}")
             
-            return (output_file, request_id)
+            return output_file
         
         except Exception as e:
             logger.error(f"Failed to fetch weather data: {e}")

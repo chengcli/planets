@@ -201,7 +201,7 @@ class TestECMWFWeatherAPI(unittest.TestCase):
             output_file = tmp.name
         
         try:
-            result_file, request_id = api.fetch_weather_data(
+            result_file = api.fetch_weather_data(
                 latmin=30.0,
                 latmax=40.0,
                 lonmin=-110.0,
