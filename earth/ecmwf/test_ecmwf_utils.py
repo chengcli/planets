@@ -9,7 +9,6 @@ import sys
 import os
 import tempfile
 import shutil
-from datetime import datetime
 from unittest.mock import MagicMock, patch, Mock
 
 # Add current directory to path
