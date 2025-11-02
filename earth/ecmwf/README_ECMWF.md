@@ -290,7 +290,7 @@ python example_ecmwf_usage.py
 
 ## Convenience Scripts
 
-Two convenient scripts are provided for common download tasks:
+Two convenient scripts are provided for common download tasks. Both scripts use **parallel downloads** where each pressure level is downloaded as a separate job, significantly improving download speed.
 
 ### 1. Download Wind and Temperature (`download_era5_wind_temp.py`)
 
@@ -308,8 +308,20 @@ python download_era5_wind_temp.py \
 
 **Optional arguments:**
 - `--times`: Specify particular times (e.g., `--times 00:00 12:00`)
+- `--jobs`: Number of parallel download jobs (default: 4). Each job downloads one pressure level.
 - `--api-key`: Provide API key directly
 - `--api-url`: Specify custom API URL
+
+**Example with custom parallelism:**
+```bash
+python download_era5_wind_temp.py \
+    --latmin 32.0 --latmax 33.5 \
+    --lonmin -106.8 --lonmax -105.8 \
+    --start-date 2024-01-01 \
+    --end-date 2024-01-02 \
+    --jobs 8 \
+    --output wind_temp_data.nc
+```
 
 ### 2. Download Density Variables (`download_era5_density_vars.py`)
 
@@ -332,8 +344,24 @@ python download_era5_density_vars.py \
 
 **Optional arguments:**
 - `--times`: Specify particular times (e.g., `--times 00:00 12:00`)
+- `--jobs`: Number of parallel download jobs (default: 4). Each job downloads one pressure level.
 - `--api-key`: Provide API key directly
 - `--api-url`: Specify custom API URL
+
+### Parallel Download Architecture
+
+Both scripts implement a **parallel download strategy**:
+- Each pressure level is downloaded as a separate job
+- Multiple jobs run in parallel (configurable with `--jobs`, default: 4)
+- Individual pressure level files are automatically combined into a single NetCDF file
+- Temporary files are cleaned up after successful combination
+- Failed downloads are reported but don't prevent combining successful levels
+
+This approach provides several benefits:
+- **Faster downloads**: Multiple pressure levels download simultaneously
+- **Better resilience**: If one pressure level fails, others continue
+- **Progress tracking**: See real-time progress for each pressure level
+- **Flexible parallelism**: Adjust the number of parallel jobs based on your network and CDS quota
 
 **Note:** Both scripts download data at all 37 standard ERA5 pressure levels (1, 2, 3, 5, 7, 10, 20, 30, 50, 70, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000 hPa).
 

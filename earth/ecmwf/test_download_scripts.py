@@ -88,6 +88,7 @@ class TestDownloadScripts(unittest.TestCase):
         self.assertEqual(args.lonmax, -100.0)
         self.assertEqual(args.start_date, '2024-01-01')
         self.assertEqual(args.end_date, '2024-01-02')
+        self.assertEqual(args.jobs, 4)  # default value
         self.assertEqual(args.output, 'test.nc')
         self.assertIsNone(args.times)
     
@@ -114,6 +115,39 @@ class TestDownloadScripts(unittest.TestCase):
         self.assertEqual(args.end_date, '2024-01-02')
         self.assertEqual(args.output, 'density.nc')
         self.assertEqual(args.times, ['00:00', '12:00'])
+        self.assertEqual(args.jobs, 4)  # default value
+    
+    @patch('sys.argv', [
+        'download_era5_wind_temp.py',
+        '--latmin', '30.0',
+        '--latmax', '40.0',
+        '--lonmin', '-110.0',
+        '--lonmax', '-100.0',
+        '--start-date', '2024-01-01',
+        '--end-date', '2024-01-02',
+        '--output', 'test.nc',
+        '--jobs', '8'
+    ])
+    def test_wind_temp_parse_jobs_argument(self):
+        """Test parsing custom jobs argument for wind_temp script."""
+        args = download_era5_wind_temp.parse_arguments()
+        self.assertEqual(args.jobs, 8)
+    
+    @patch('sys.argv', [
+        'download_era5_density_vars.py',
+        '--latmin', '30.0',
+        '--latmax', '40.0',
+        '--lonmin', '-110.0',
+        '--lonmax', '-100.0',
+        '--start-date', '2024-01-01',
+        '--end-date', '2024-01-02',
+        '--output', 'test.nc',
+        '--jobs', '10'
+    ])
+    def test_density_vars_parse_jobs_argument(self):
+        """Test parsing custom jobs argument for density_vars script."""
+        args = download_era5_density_vars.parse_arguments()
+        self.assertEqual(args.jobs, 10)
     
     @patch('sys.argv', [
         'download_era5_wind_temp.py',
