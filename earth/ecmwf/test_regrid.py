@@ -427,6 +427,8 @@ class TestParallelProcessing(unittest.TestCase):
     
     def test_vertical_interp_parallel_vs_sequential(self):
         """Test that parallel vertical interpolation produces same results as sequential."""
+        import multiprocessing
+        
         # Create test data
         T, Lat, Lon, P = 3, 10, 12, 8
         z_tllp = np.random.randn(T, Lat, Lon, P) * 1000.0 + 5000.0
@@ -437,14 +439,17 @@ class TestParallelProcessing(unittest.TestCase):
         # Sequential execution
         result_sequential = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=1)
         
-        # Parallel execution
-        result_parallel = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=2)
+        # Parallel execution (use available CPUs, but at least 2 if possible)
+        n_workers = min(2, multiprocessing.cpu_count())
+        result_parallel = vertical_interp_to_z(z_tllp, v_tllp, z_out, bounds_error=False, n_jobs=n_workers)
         
         # Results should be identical (accounting for floating point precision)
         np.testing.assert_array_almost_equal(result_sequential, result_parallel, decimal=10)
         
     def test_horizontal_regrid_parallel_vs_sequential(self):
         """Test that parallel horizontal regridding produces same results as sequential."""
+        import multiprocessing
+        
         # Create test data
         T, P, Lat, Lon = 2, 4, 8, 10
         plev = np.array([100000., 80000., 60000., 40000.])  # Pa
@@ -473,14 +478,15 @@ class TestParallelProcessing(unittest.TestCase):
             n_jobs=1
         )
         
-        # Parallel execution
+        # Parallel execution (use available CPUs, but at least 2 if possible)
+        n_workers = min(2, multiprocessing.cpu_count())
         result_parallel = regrid_pressure_to_height(
             var_tpll, rho_tpll, topo_ll,
             plev, lats, lons,
             x1f, x2f, x3f,
             planet_grav, planet_radius,
             bounds_error=False,
-            n_jobs=2
+            n_jobs=n_workers
         )
         
         # Results should be identical (accounting for floating point precision)

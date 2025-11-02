@@ -24,6 +24,10 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
+# Parallelization thresholds
+_VERTICAL_INTERP_PARALLEL_THRESHOLD = 100  # Minimum columns for parallel vertical interpolation
+_HORIZONTAL_REGRID_PARALLEL_THRESHOLD = 10  # Minimum slices for parallel horizontal regridding
+
 
 def compute_dz_from_plev(
     plev: np.ndarray,   # (P,) pressure levels [Pa], typically decreasing with height
@@ -168,7 +172,7 @@ def latlon_to_xy(
     return Y, X
 
 
-def _interp_single_column(args):
+def _vertical_interp_single_column(args):
     """
     Helper function for parallel vertical interpolation of a single column.
     
@@ -244,7 +248,7 @@ def vertical_interp_to_z(
     # Determine number of jobs
     if n_jobs is None:
         # Auto: Use parallelization only if we have enough columns to make it worthwhile
-        n_jobs = min(cpu_count(), max(1, n_cols // 100)) if n_cols > 100 else 1
+        n_jobs = min(cpu_count(), max(1, n_cols // _VERTICAL_INTERP_PARALLEL_THRESHOLD)) if n_cols > _VERTICAL_INTERP_PARALLEL_THRESHOLD else 1
     elif n_jobs == -1:
         n_jobs = cpu_count()
     elif n_jobs < 1:
@@ -286,7 +290,7 @@ def vertical_interp_to_z(
         args_list = [(i, z_flat[i], v_flat[i], z_out) for i in range(n_cols)]
         
         with Pool(processes=n_jobs) as pool:
-            results = pool.map(_interp_single_column, args_list)
+            results = pool.map(_vertical_interp_single_column, args_list)
         
         # Collect results
         for i, vals, extrap_detected in results:
@@ -523,7 +527,7 @@ def regrid_pressure_to_height(
     n_slices = T * Z
     if n_jobs is None:
         # Auto: Use parallelization only if we have enough slices to make it worthwhile
-        n_jobs_horiz = min(cpu_count(), max(1, n_slices // 10)) if n_slices > 10 else 1
+        n_jobs_horiz = min(cpu_count(), max(1, n_slices // _HORIZONTAL_REGRID_PARALLEL_THRESHOLD)) if n_slices > _HORIZONTAL_REGRID_PARALLEL_THRESHOLD else 1
     elif n_jobs == -1:
         n_jobs_horiz = cpu_count()
     elif n_jobs < 1:
