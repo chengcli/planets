@@ -12,6 +12,7 @@ Functions:
     vertical_interp_to_z: Vertical interpolation to uniform height grid
     horizontal_regrid_xy: Horizontal regridding on regular grids
     regrid_pressure_to_height: Complete pipeline from (T,P,Lat,Lon) to (T,Z,Y,X)
+    regrid_multiple_variables: Regrid multiple variables in parallel for improved performance
     regrid_topography: Regrid topographic elevation to distance grids
     save_regridded_data_to_netcdf: Save regridded atmospheric data to NetCDF with metadata
     save_topography_to_netcdf: Save regridded topography to NetCDF with metadata
@@ -340,15 +341,8 @@ def horizontal_regrid_xy(
                 f"input y range [{y.min():.2f}, {y.max():.2f}]. Extrapolation is not allowed."
             )
 
-    # Choose interpolation method based on grid size and data quality
-    # Cubic requires at least 4 points per dimension and no NaN values
-    # Note: We check for NaN only if cubic is feasible to avoid unnecessary full array scans
-    method = "linear"  # Default to linear
-    if len(x) >= 4 and len(y) >= 4:
-        # Only check for NaN if we might use cubic interpolation
-        has_nan = np.any(np.isnan(field))
-        if not has_nan:
-            method = "cubic"
+    # Use linear interpolation by default for better performance and stability
+    method = "linear"
     
     interp = RegularGridInterpolator((x, y),
                                      field,
@@ -566,6 +560,135 @@ def regrid_pressure_to_height(
                 var_tzyx[ti, zi, :, :] = result
     
     return var_tzyx
+
+
+def _regrid_single_variable(args):
+    """
+    Helper function for parallel regridding of a single variable.
+    
+    Args:
+        args: Tuple containing all arguments needed for regrid_pressure_to_height
+        
+    Returns:
+        Tuple of (variable_name, regridded_data)
+    """
+    (var_name, var_tpll, rho_tpll, topo_ll, plev, lats, lons, 
+     x1f, x2f, x3f, planet_grav, planet_radius, bounds_error, z_tpll, n_jobs) = args
+    
+    result = regrid_pressure_to_height(
+        var_tpll, rho_tpll, topo_ll, plev, lats, lons,
+        x1f, x2f, x3f, planet_grav, planet_radius,
+        bounds_error=bounds_error, z_tpll=z_tpll, n_jobs=n_jobs
+    )
+    
+    return (var_name, result)
+
+
+def regrid_multiple_variables(
+    variables: Dict[str, np.ndarray],  # Dictionary of variable_name: (T, P, Lat, Lon) arrays
+    rho_tpll: np.ndarray,              # (T, P, Lat, Lon) air density [kg/m^3]
+    topo_ll: np.ndarray,               # (Lat, Lon) topographic elevation [m]
+    plev: np.ndarray,                  # (P,) pressure levels [Pa]
+    lats: np.ndarray,                  # (Lat,) latitude [degrees]
+    lons: np.ndarray,                  # (Lon,) longitude [degrees]
+    x1f: np.ndarray,                   # (Z,) vertical height coordinate [m]
+    x2f: np.ndarray,                   # (Y,) horizontal Y-coordinate [m]
+    x3f: np.ndarray,                   # (X,) horizontal X-coordinate [m]
+    planet_grav: float,                # gravity constant [m/s^2]
+    planet_radius: float,              # radius of the planet [m]
+    bounds_error: bool = True,         # If True, raise error when extrapolation would occur
+    z_tpll: Optional[np.ndarray] = None,  # (T, P, Lat, Lon) pre-computed heights [m]
+    n_jobs: Optional[int] = None,      # Number of parallel workers for within-variable parallelization
+    n_jobs_vars: Optional[int] = None, # Number of parallel workers for across-variable parallelization
+) -> Dict[str, np.ndarray]:
+    """
+    Regrid multiple atmospheric variables in parallel for improved performance.
+    
+    This function parallelizes across multiple variables, with each variable also being
+    regridded in parallel internally (if n_jobs != 1). This provides two levels of
+    parallelization for maximum performance when processing multiple variables.
+    
+    Args:
+        variables: Dictionary mapping variable names to (T, P, Lat, Lon) arrays
+        rho_tpll: (T, P, Lat, Lon) air density [kg/m^3]
+        topo_ll: (Lat, Lon) topographic elevation [m]
+        plev: (P,) pressure levels [Pa], typically decreasing with height
+        lats: (Lat,) latitude array [degrees]
+        lons: (Lon,) longitude array [degrees]
+        x1f: (Z,) vertical height coordinate [m]
+        x2f: (Y,) horizontal Y-coordinate [m]
+        x3f: (X,) horizontal X-coordinate [m]
+        planet_grav: gravity constant [m/s^2]
+        planet_radius: radius of the planet [m]
+        bounds_error: If True, raise error when extrapolation would occur
+        z_tpll: Optional pre-computed (T, P, Lat, Lon) heights [m]. If None,
+                heights are computed once and reused for all variables.
+        n_jobs: Number of parallel workers for within-variable parallelization
+                (vertical interpolation and horizontal regridding). None=auto, 1=sequential.
+        n_jobs_vars: Number of parallel workers for across-variable parallelization.
+                     None=auto, 1=sequential (process variables one at a time).
+        
+    Returns:
+        Dictionary mapping variable names to regridded (T, Z, Y, X) arrays
+        
+    Raises:
+        ValueError: If output domain exceeds input domain when bounds_error=True
+        
+    Example:
+        >>> # Regrid multiple variables efficiently
+        >>> variables = {
+        ...     'temperature': temp_tpll,
+        ...     'humidity': humid_tpll,
+        ...     'pressure': press_tpll,
+        ... }
+        >>> results = regrid_multiple_variables(
+        ...     variables, rho_tpll, topo_ll, plev, lats, lons,
+        ...     x1f, x2f, x3f, planet_grav, planet_radius,
+        ...     n_jobs=1,        # Sequential within each variable
+        ...     n_jobs_vars=-1   # Parallelize across variables
+        ... )
+        >>> temp_tzyx = results['temperature']
+        >>> humid_tzyx = results['humidity']
+    """
+    # Compute heights once if not provided
+    if z_tpll is None:
+        z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+    
+    # Determine number of jobs for variable parallelization
+    n_vars = len(variables)
+    if n_jobs_vars is None:
+        # Auto: Use parallelization if we have multiple variables
+        n_jobs_vars = min(cpu_count(), n_vars) if n_vars > 1 else 1
+    elif n_jobs_vars == -1:
+        n_jobs_vars = cpu_count()
+    elif n_jobs_vars < 1:
+        n_jobs_vars = 1
+    
+    # If only one variable or sequential processing, use simple loop
+    if n_jobs_vars == 1 or n_vars == 1:
+        results = {}
+        for var_name, var_tpll in variables.items():
+            results[var_name] = regrid_pressure_to_height(
+                var_tpll, rho_tpll, topo_ll, plev, lats, lons,
+                x1f, x2f, x3f, planet_grav, planet_radius,
+                bounds_error=bounds_error, z_tpll=z_tpll, n_jobs=n_jobs
+            )
+        return results
+    
+    # Parallel processing across variables
+    args_list = [
+        (var_name, var_tpll, rho_tpll, topo_ll, plev, lats, lons,
+         x1f, x2f, x3f, planet_grav, planet_radius, bounds_error, z_tpll, n_jobs)
+        for var_name, var_tpll in variables.items()
+    ]
+    
+    with Pool(processes=n_jobs_vars) as pool:
+        results_list = pool.map(_regrid_single_variable, args_list)
+    
+    # Convert list of tuples back to dictionary
+    results = {var_name: result for var_name, result in results_list}
+    
+    return results
 
 
 def regrid_topography(

@@ -173,7 +173,7 @@ def horizontal_regrid_xy(
     """
     interp = RegularGridInterpolator((x, y),
                                      field,
-                                     method="cubic",
+                                     method="linear",
                                      bounds_error=False, 
                                      fill_value=np.nan)
 

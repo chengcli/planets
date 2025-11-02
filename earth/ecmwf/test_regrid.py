@@ -17,6 +17,7 @@ from regrid import (
     vertical_interp_to_z,
     horizontal_regrid_xy,
     regrid_pressure_to_height,
+    regrid_multiple_variables,
     regrid_topography,
     save_regridded_data_to_netcdf,
     save_topography_to_netcdf,
@@ -422,6 +423,165 @@ class TestRegridTopography(unittest.TestCase):
         self.assertEqual(result.shape, (len(x2f), len(x3f)))
 
 
+class TestMultipleVariables(unittest.TestCase):
+    """Test cases for regrid_multiple_variables function."""
+    
+    def test_basic_multiple_variables(self):
+        """Test regridding multiple variables."""
+        # Create test data
+        T, P, Lat, Lon = 2, 4, 6, 8
+        plev = np.array([100000., 80000., 60000., 40000.])  # Pa
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        # Create multiple variables
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        press_tpll = 50000.0 + np.random.randn(T, P, Lat, Lon) * 1000.0
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+            'pressure': press_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 10)
+        x2f = np.linspace(-1000., 1000., 6)
+        x3f = np.linspace(-2000., 2000., 8)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Regrid multiple variables
+        results = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1,
+            n_jobs_vars=1
+        )
+        
+        # Check that all variables are present
+        self.assertEqual(set(results.keys()), {'temperature', 'humidity', 'pressure'})
+        
+        # Check output shapes
+        expected_shape = (T, len(x1f), len(x2f), len(x3f))
+        for var_name, result in results.items():
+            self.assertEqual(result.shape, expected_shape, 
+                           f"Variable {var_name} has incorrect shape")
+    
+    def test_multiple_variables_parallel_vs_sequential(self):
+        """Test that parallel and sequential multi-variable regridding produce same results."""
+        import multiprocessing
+        
+        # Create test data
+        T, P, Lat, Lon = 2, 3, 5, 6
+        plev = np.array([100000., 70000., 40000.])  # Pa
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 8)
+        x2f = np.linspace(-1000., 1000., 5)
+        x3f = np.linspace(-2000., 2000., 6)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Sequential variable processing
+        results_seq = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1,
+            n_jobs_vars=1
+        )
+        
+        # Parallel variable processing
+        n_workers = min(2, multiprocessing.cpu_count())
+        results_par = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            n_jobs=1,
+            n_jobs_vars=n_workers
+        )
+        
+        # Results should be identical
+        for var_name in variables.keys():
+            np.testing.assert_array_almost_equal(
+                results_seq[var_name], results_par[var_name], decimal=10,
+                err_msg=f"Variable {var_name} differs between sequential and parallel"
+            )
+    
+    def test_multiple_variables_with_precomputed_heights(self):
+        """Test that pre-computed heights work with multiple variables."""
+        T, P, Lat, Lon = 2, 3, 4, 5
+        plev = np.array([100000., 70000., 40000.])
+        lats = np.linspace(30.0, 35.0, Lat)
+        lons = np.linspace(-110.0, -105.0, Lon)
+        
+        temp_tpll = 280.0 + np.random.randn(T, P, Lat, Lon) * 10.0
+        humid_tpll = 0.5 + np.random.randn(T, P, Lat, Lon) * 0.1
+        
+        variables = {
+            'temperature': temp_tpll,
+            'humidity': humid_tpll,
+        }
+        
+        rho_tpll = 1.0 + 0.1 * np.random.randn(T, P, Lat, Lon)
+        rho_tpll = np.maximum(rho_tpll, 0.1)
+        topo_ll = np.random.randn(Lat, Lon) * 50.0
+        
+        x1f = np.linspace(0., 5000., 8)
+        x2f = np.linspace(-1000., 1000., 5)
+        x3f = np.linspace(-2000., 2000., 6)
+        
+        planet_grav = 9.81
+        planet_radius = 6371.e3
+        
+        # Pre-compute heights
+        z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+        
+        # Regrid with pre-computed heights
+        results = regrid_multiple_variables(
+            variables, rho_tpll, topo_ll,
+            plev, lats, lons,
+            x1f, x2f, x3f,
+            planet_grav, planet_radius,
+            bounds_error=False,
+            z_tpll=z_tpll,
+            n_jobs=1,
+            n_jobs_vars=1
+        )
+        
+        # Should complete without errors and have correct shapes
+        expected_shape = (T, len(x1f), len(x2f), len(x3f))
+        for var_name, result in results.items():
+            self.assertEqual(result.shape, expected_shape)
+
+
 class TestParallelProcessing(unittest.TestCase):
     """Test cases for parallel processing functionality."""
     
@@ -686,6 +846,7 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestHorizontalRegridXy))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridPressureToHeight))
     suite.addTests(loader.loadTestsFromTestCase(TestRegridTopography))
+    suite.addTests(loader.loadTestsFromTestCase(TestMultipleVariables))
     suite.addTests(loader.loadTestsFromTestCase(TestParallelProcessing))
     suite.addTests(loader.loadTestsFromTestCase(TestSaveToNetCDF))
     

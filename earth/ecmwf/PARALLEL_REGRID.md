@@ -108,6 +108,7 @@ The following functions support the `n_jobs` parameter:
 
 - `vertical_interp_to_z()`: Vertical interpolation with parallel column processing
 - `regrid_pressure_to_height()`: Full regridding pipeline with parallel vertical and horizontal interpolation
+- `regrid_multiple_variables()`: Regrid multiple variables in parallel (NEW!)
 
 ### Simple Regrid Module (`earth/regrid.py`)
 
@@ -171,7 +172,7 @@ result = regrid_pressure_to_height(
 )
 ```
 
-### Example 2: Multiple Variables with Pre-computed Heights
+### Example 2: Multiple Variables with Pre-computed Heights (Traditional Approach)
 
 ```python
 from regrid import compute_height_grid, regrid_pressure_to_height
@@ -197,7 +198,46 @@ humid_result = regrid_pressure_to_height(
 )
 ```
 
-### Example 3: Conservative Resource Usage
+### Example 3: Multiple Variables in One Call (Recommended!)
+
+```python
+from regrid import regrid_multiple_variables, compute_height_grid
+
+# Prepare multiple variables to regrid
+variables = {
+    'temperature': temp_tpll,
+    'humidity': humid_tpll,
+    'pressure': press_tpll,
+    'wind_u': u_tpll,
+    'wind_v': v_tpll,
+}
+
+# Optional: Pre-compute heights once for all variables
+z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, planet_grav)
+
+# Regrid all variables in parallel
+results = regrid_multiple_variables(
+    variables, rho_tpll, topo_ll,
+    plev, lats, lons, x1f, x2f, x3f,
+    planet_grav, planet_radius,
+    z_tpll=z_tpll,   # Pre-computed heights (optional)
+    n_jobs=1,        # Sequential within each variable
+    n_jobs_vars=-1   # Parallelize across variables (use all CPUs)
+)
+
+# Access results
+temp_tzyx = results['temperature']
+humid_tzyx = results['humidity']
+# ... etc.
+```
+
+This approach provides two levels of parallelization:
+- **Across variables** (`n_jobs_vars`): Different variables are processed simultaneously
+- **Within variables** (`n_jobs`): Each variable's interpolation is parallelized
+
+For many variables, this can be significantly faster than processing them sequentially!
+
+### Example 4: Conservative Resource Usage
 
 ```python
 # Limit to 2 workers to avoid overloading the system

@@ -220,6 +220,44 @@ def main():
     print(f"   Output density range: [{np.nanmin(rho_tzyx):.3f}, {np.nanmax(rho_tzyx):.3f}] kg/m^3")
     print(f"\n   Note: Heights computed once, reused for both variables, and processed in parallel!")
     
+    # Alternative: Step 6b - Regrid multiple variables in one call (even more efficient!)
+    print("\n6b. Alternative approach: Regrid multiple variables at once...")
+    print("    This parallelizes across variables for even better performance!")
+    
+    from regrid import regrid_multiple_variables
+    
+    variables_to_regrid = {
+        'temperature': temp_tpll,
+        'density': rho_tpll,
+    }
+    
+    results = regrid_multiple_variables(
+        variables_to_regrid,
+        rho_tpll,
+        topo_ll,
+        plev,
+        lats,
+        lons,
+        x1f,
+        x2f,
+        x3f,
+        planet_grav,
+        planet_radius,
+        bounds_error=False,
+        z_tpll=z_tpll,  # Reuse pre-computed heights
+        n_jobs=1,       # Sequential within each variable (or use None for auto)
+        n_jobs_vars=-1  # Parallelize across variables
+    )
+    
+    print(f"   Regridded {len(results)} variables in parallel")
+    print(f"   Temperature shape: {results['temperature'].shape}")
+    print(f"   Density shape: {results['density'].shape}")
+    print(f"   Note: This approach is ideal when regridding many variables!")
+    
+    # Use results from multi-variable function for saving
+    temp_tzyx = results['temperature']
+    rho_tzyx = results['density']
+    
     # Step 8: Save to NetCDF files
     print("\n7. Saving regridded data to NetCDF files...")
     
