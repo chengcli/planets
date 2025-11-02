@@ -58,7 +58,7 @@ def parse_arguments():
         epilog="""
 Variables downloaded:
   1. Temperature
-  2. U-component of windk
+  2. U-component of wind
   3. V-component of wind
   4. Vertical velocity
   5. Divergence
