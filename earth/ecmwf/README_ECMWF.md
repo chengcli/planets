@@ -11,6 +11,41 @@ The ECMWF Weather API provides a Python interface to:
 - Define time windows and pressure levels
 - Process and load the downloaded data
 
+## Complete Data Curation Pipeline
+
+For atmospheric modeling with finite volume methods, use the complete 4-step pipeline:
+
+**Step 1: Fetch ERA5 Data** ([STEP1_README.md](STEP1_README.md))
+- Script: `fetch_era5_pipeline.py`
+- Downloads ERA5 data based on YAML configuration
+- Automatically calculates geographic bounds from Cartesian domain
+- Includes ghost zones and buffer regions
+
+**Step 2: Calculate Air Density** ([STEP2_README.md](STEP2_README.md))
+- Script: `calculate_density.py`
+- Computes total air density from dynamics and densities data
+- Solves ideal gas law with moisture and cloud content
+- Outputs density components and total density
+
+**Step 3: Regrid to Cartesian Coordinates** ([STEP3_README.md](STEP3_README.md))
+- Script: `regrid_era5_to_cartesian.py`
+- Transforms pressure-level data to height-based Cartesian grid
+- Handles ghost zones for finite volume methods
+- Creates cell-centered and cell-interface coordinates
+
+**Step 4: Compute Hydrostatic Pressure** ([STEP4_README.md](STEP4_README.md))
+- Script: `compute_hydrostatic_pressure.py`
+- Ensures hydrostatic balance in regridded data
+- Computes pressure at cell centers from density
+- Augments NetCDF file with balanced pressure field
+
+### Example Configurations
+
+Ready-to-use configurations are provided:
+- `example_white_sands.yaml`: White Sands Missile Range, New Mexico
+- `example_ann_arbor.yaml`: Ann Arbor, Michigan
+- `example_pipeline_usage.yaml`: General example with detailed comments
+
 ## File Structure
 
 ### Core API Files
@@ -28,6 +63,9 @@ The ECMWF Weather API provides a Python interface to:
 - `example_ecmwf_usage.py`: Demonstrates various API usage patterns
 - `example_regrid.py`: Shows how to regrid downloaded data
 - `example_calculate_density.py`: Demonstrates air density calculation
+- `example_white_sands.yaml`: Complete configuration for White Sands Missile Range, NM
+- `example_ann_arbor.yaml`: Complete configuration for Ann Arbor, MI
+- `example_pipeline_usage.yaml`: General configuration with detailed comments
 
 ### Tests
 - `test_ecmwf_weather_api.py`: Tests for main API functionality
@@ -37,9 +75,16 @@ The ECMWF Weather API provides a Python interface to:
 - `test_regrid.py`: Tests for regridding functions
 - `test_calculate_density.py`: Tests for density calculation
 
+### Documentation
+- `README_ECMWF.md`: This documentation file (overview and API reference)
+- `STEP1_README.md`: Step 1 - Fetch ERA5 data from YAML configuration
+- `STEP2_README.md`: Step 2 - Calculate air density from downloaded data
+- `STEP3_README.md`: Step 3 - Regrid to Cartesian coordinates
+- `STEP4_README.md`: Step 4 - Compute hydrostatic pressure
+- `PARALLEL_REGRID.md`: Parallel regridding implementation details
+
 ### Configuration
 - `requirements.txt`: Python package dependencies
-- `README_ECMWF.md`: This documentation file
 
 ## Installation
 
