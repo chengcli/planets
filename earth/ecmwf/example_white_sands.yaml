@@ -16,12 +16,12 @@ geometry:
   # x2 = Y direction (north-south distance)
   # x3 = X direction (east-west distance)
   bounds:
-    x1min: 0.              # Ground level (meters)
-    x1max: 10.e3           # 10 km vertical extent (top of domain)
-    x2min: 0.              # South edge (meters, including ghost)
-    x2max: 150.e3          # 150 km north-south extent (including ghost)
-    x3min: 0.              # West edge (meters, including ghost)
-    x3max: 150.e3          # 150 km east-west extent (including ghost)
+    x1min: 0.0             # Ground level (meters)
+    x1max: 10000.0         # 10 km vertical extent (top of domain)
+    x2min: 0.0             # South edge (meters, including ghost)
+    x2max: 150000.0        # 150 km north-south extent (including ghost)
+    x3min: 0.0             # West edge (meters, including ghost)
+    x3max: 150000.0        # 150 km east-west extent (including ghost)
   
   # Grid cell configuration
   # Total cells = interior cells + 2 × nghost in each direction
