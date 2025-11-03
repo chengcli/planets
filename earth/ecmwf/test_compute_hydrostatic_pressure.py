@@ -98,40 +98,37 @@ class TestExtractGravity(unittest.TestCase):
         self.assertAlmostEqual(gravity, 9.8)
     
     def test_extract_missing_forcing(self):
-        """Test that missing forcing field raises error."""
+        """Test that missing forcing field returns default."""
         config = {}
         
-        with self.assertRaises(ValueError) as context:
-            extract_gravity(config)
-        
-        self.assertIn('forcing', str(context.exception))
+        # Should return default value without raising error
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)
     
     def test_extract_missing_const_gravity(self):
-        """Test that missing const-gravity field raises error."""
+        """Test that missing const-gravity field returns default."""
         config = {
             'forcing': {}
         }
         
-        with self.assertRaises(ValueError) as context:
-            extract_gravity(config)
-        
-        self.assertIn('const-gravity', str(context.exception))
+        # Should return default value without raising error
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)
     
     def test_extract_missing_grav1(self):
-        """Test that missing grav1 field raises error."""
+        """Test that missing grav1 field returns default."""
         config = {
             'forcing': {
                 'const-gravity': {}
             }
         }
         
-        with self.assertRaises(ValueError) as context:
-            extract_gravity(config)
-        
-        self.assertIn('grav1', str(context.exception))
+        # Should return default value without raising error
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)
     
     def test_extract_zero_gravity(self):
-        """Test that zero gravity raises error."""
+        """Test that zero gravity returns default."""
         config = {
             'forcing': {
                 'const-gravity': {
@@ -140,10 +137,9 @@ class TestExtractGravity(unittest.TestCase):
             }
         }
         
-        with self.assertRaises(ValueError) as context:
-            extract_gravity(config)
-        
-        self.assertIn('non-zero', str(context.exception))
+        # Should return default value for invalid (zero) gravity
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)
 
 
 class TestLoadRegriddedData(unittest.TestCase):

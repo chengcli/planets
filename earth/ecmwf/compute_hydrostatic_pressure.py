@@ -60,41 +60,34 @@ def parse_yaml_config(yaml_file: str) -> Dict:
     return config
 
 
-def extract_gravity(config: Dict) -> float:
+def extract_gravity(config: Dict, default: float = 9.80665) -> float:
     """
     Extract gravity value from configuration.
     
     Args:
         config: Parsed YAML configuration dictionary
+        default: Default gravity value to use if not found in config (m/s^2)
         
     Returns:
-        Gravity value (positive value in m/s^2)
-        
-    Raises:
-        ValueError: If gravity field is missing or invalid
+        Gravity value (positive, in m/s^2). Returns default if not found.
     """
-    if 'forcing' not in config:
-        raise ValueError("Configuration must contain 'forcing' field")
+    try:
+        if 'forcing' in config:
+            forcing = config['forcing']
+            if 'const-gravity' in forcing:
+                const_gravity = forcing['const-gravity']
+                if 'grav1' in const_gravity:
+                    grav1 = float(const_gravity['grav1'])
+                    # grav1 is typically negative (pointing downward), convert to positive
+                    gravity = abs(grav1)
+                    if gravity > 0:
+                        return gravity
+    except (KeyError, TypeError, ValueError):
+        pass
     
-    forcing = config['forcing']
-    
-    if 'const-gravity' not in forcing:
-        raise ValueError("Forcing must contain 'const-gravity' field")
-    
-    const_gravity = forcing['const-gravity']
-    
-    if 'grav1' not in const_gravity:
-        raise ValueError("const-gravity must contain 'grav1' field")
-    
-    grav1 = float(const_gravity['grav1'])
-    
-    # grav1 is typically negative (pointing downward), convert to positive magnitude
-    gravity = abs(grav1)
-    
-    if gravity <= 0:
-        raise ValueError(f"Gravity must be non-zero, got: {grav1}")
-    
-    return gravity
+    # Return default if not found or parsing fails
+    print(f"   Warning: Could not read gravity from config, using default: {default} m/s²")
+    return default
 
 
 def load_regridded_data(nc_file: str):
