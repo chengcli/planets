@@ -1,7 +1,7 @@
 # Example YAML configuration for White Sands Missile Range, New Mexico
 # 
 # White Sands Missile Range is located in south-central New Mexico
-# Center coordinates: approximately 32.5°N, 106.3°W
+# Center coordinates: approximately 32.5°N, -106.3°W
 # Elevation: approximately 1200-1300 meters above sea level
 # 
 # This configuration demonstrates a complete setup for atmospheric simulation
@@ -60,9 +60,9 @@ forcing:
 # 
 # 1. Geographic bounds calculation:
 #    - Domain size: ~150 km × ~150 km (x2 × x3)
-#    - Center: 32.5°N, 106.3°W
-#    - Approximate bounds: ~31.8°N to ~33.2°N, ~107.0°W to ~105.6°W
-#    - With 10% buffer: ~31.7°N to ~33.3°N, ~107.1°W to ~105.5°W
+#    - Center: 32.5°N, -106.3°
+#    - Approximate bounds: ~31.8°N to ~33.2°N, ~-107.0° to ~-105.6°
+#    - With 10% buffer: ~31.7°N to ~33.3°N, ~-107.1° to ~-105.5°
 #
 # 2. Output directory name: e.g., 31.73N_33.27N_107.10W_105.50W/
 #
