@@ -15,6 +15,7 @@ import yaml
 from regrid_era5_to_cartesian import (
     parse_yaml_config,
     extract_geometry_info,
+    extract_gravity,
     compute_cell_coordinates,
     find_era5_files,
     save_regridded_data_with_interfaces,
@@ -185,6 +186,66 @@ class TestExtractGeometryInfo(unittest.TestCase):
             extract_geometry_info(config)
         
         self.assertIn('center', str(context.exception).lower())
+
+
+class TestExtractGravity(unittest.TestCase):
+    """Test cases for extracting gravity from configuration."""
+    
+    def test_extract_valid_gravity_negative(self):
+        """Test extracting valid negative gravity value."""
+        config = {
+            'forcing': {
+                'const-gravity': {
+                    'grav1': -9.8
+                }
+            }
+        }
+        
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.8)
+    
+    def test_extract_valid_gravity_positive(self):
+        """Test extracting valid positive gravity value."""
+        config = {
+            'forcing': {
+                'const-gravity': {
+                    'grav1': 9.8
+                }
+            }
+        }
+        
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.8)
+    
+    def test_extract_missing_forcing_returns_default(self):
+        """Test that missing forcing field returns default."""
+        config = {}
+        
+        # Should return default value without raising error
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)  # Default Earth gravity
+    
+    def test_extract_missing_const_gravity_returns_default(self):
+        """Test that missing const-gravity field returns default."""
+        config = {
+            'forcing': {}
+        }
+        
+        # Should return default value without raising error
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)
+    
+    def test_extract_missing_grav1_returns_default(self):
+        """Test that missing grav1 field returns default."""
+        config = {
+            'forcing': {
+                'const-gravity': {}
+            }
+        }
+        
+        # Should return default value without raising error
+        gravity = extract_gravity(config)
+        self.assertAlmostEqual(gravity, 9.80665)
 
 
 class TestComputeCellCoordinates(unittest.TestCase):
