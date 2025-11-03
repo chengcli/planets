@@ -95,7 +95,10 @@ def extract_gravity(config: Dict) -> float:
                 if 'grav1' in const_gravity:
                     grav1 = float(const_gravity['grav1'])
                     # grav1 is typically negative (pointing downward), convert to positive
-                    return abs(grav1)
+                    gravity = abs(grav1)
+                    # Validate non-zero
+                    if gravity > 0:
+                        return gravity
     except (KeyError, TypeError, ValueError):
         pass
     
