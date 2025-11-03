@@ -34,7 +34,7 @@ geometry:
   # Geographic center of the computational domain
   # Ann Arbor, Michigan coordinates (University of Michigan campus)
   center_latitude: 42.3    # degrees north
-  center_longitude: -83.7  # degrees east (negative for west)
+  center_longitude: -83.7  # degrees east (negative values for western hemisphere)
 
 integration:
   # Integration parameters for atmospheric model

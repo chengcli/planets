@@ -481,7 +481,7 @@ print(f"Clouds: {rho_c} kg/m³")
 - Step 1: [STEP1_README.md](STEP1_README.md)
 - Step 3: [STEP3_README.md](STEP3_README.md)
 - Wallace and Hobbs (2006), "Atmospheric Science: An Introductory Survey"
-- CF Conventions: [http://cfconventions.org/](http://cfconventions.org/)
+- CF Conventions: [https://cfconventions.org/](https://cfconventions.org/)
 
 ## Support
 
