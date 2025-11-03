@@ -212,6 +212,8 @@ def compute_hydrostatic_pressure(ds, gravity: float):
     
     # Compute cell center pressure as geometric mean
     # p[i] = sqrt(pf[i] * pf[i+1])
+    # Use float32 to match NetCDF storage format and maintain consistency with other variables
+    # Precision loss is negligible (< 1e-6 relative error) for typical pressure values
     p = np.zeros((T, Z, Y, X), dtype=np.float32)
     
     for i in range(Z):
