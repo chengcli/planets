@@ -48,7 +48,7 @@ from regrid import (
 
 # Physical constants
 EARTH_RADIUS = 6371.0e3  # Earth radius in meters
-EARTH_GRAVITY = 9.80665  # Earth gravity in m/s^2
+EARTH_GRAVITY_DEFAULT = 9.80665  # Default Earth gravity in m/s^2 (used if not in config)
 
 
 def parse_yaml_config(yaml_file: str) -> Dict:
@@ -75,6 +75,36 @@ def parse_yaml_config(yaml_file: str) -> Dict:
             raise yaml.YAMLError(f"Failed to parse YAML file: {e}")
     
     return config
+
+
+def extract_gravity(config: Dict) -> float:
+    """
+    Extract gravity value from configuration.
+    
+    Args:
+        config: Parsed YAML configuration dictionary
+        
+    Returns:
+        Gravity value (positive, in m/s^2). Returns default if not found.
+    """
+    try:
+        if 'forcing' in config:
+            forcing = config['forcing']
+            if 'const-gravity' in forcing:
+                const_gravity = forcing['const-gravity']
+                if 'grav1' in const_gravity:
+                    grav1 = float(const_gravity['grav1'])
+                    # grav1 is typically negative (pointing downward), convert to positive
+                    gravity = abs(grav1)
+                    # Validate non-zero
+                    if gravity > 0:
+                        return gravity
+    except (KeyError, TypeError, ValueError):
+        pass
+    
+    # Return default if not found or parsing fails
+    print(f"   Warning: Could not read gravity from config, using default: {EARTH_GRAVITY_DEFAULT} m/s²")
+    return EARTH_GRAVITY_DEFAULT
 
 
 def extract_geometry_info(config: Dict) -> Dict:
@@ -497,8 +527,10 @@ def regrid_era5_to_cartesian(
     print(f"\n1. Reading configuration from: {config_file}")
     config = parse_yaml_config(config_file)
     geometry = extract_geometry_info(config)
+    gravity = extract_gravity(config)
     
     print(f"   Center: ({geometry['center_latitude']:.4f}°, {geometry['center_longitude']:.4f}°)")
+    print(f"   Gravity: {gravity:.6f} m/s²")
     print(f"   Domain bounds (with ghost zones):")
     print(f"     x1 (Z): [{geometry['bounds']['x1min']:.1f}, {geometry['bounds']['x1max']:.1f}] m")
     print(f"     x2 (Y): [{geometry['bounds']['x2min']:.1f}, {geometry['bounds']['x2max']:.1f}] m")
@@ -550,7 +582,7 @@ def regrid_era5_to_cartesian(
     rho_tpll = variables['rho']
     
     # Compute height grid once for all variables
-    z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, EARTH_GRAVITY)
+    z_tpll = compute_height_grid(rho_tpll, topo_ll, plev, gravity)
     print(f"   Height grid computed: shape {z_tpll.shape}")
     print(f"   Height range: [{np.min(z_tpll):.1f}, {np.max(z_tpll):.1f}] m")
     
@@ -570,7 +602,7 @@ def regrid_era5_to_cartesian(
         x1,  # Use cell centers
         x2,
         x3,
-        EARTH_GRAVITY,
+        gravity,
         EARTH_RADIUS,
         bounds_error=False,  # Allow NaNs outside domain
         z_tpll=z_tpll,
@@ -602,7 +634,7 @@ def regrid_era5_to_cartesian(
         x1f,  # Use cell interfaces for vertical coordinate
         x2,   # Use cell centers for horizontal
         x3,
-        EARTH_GRAVITY,
+        gravity,
         EARTH_RADIUS,
         bounds_error=False,
         z_tpll=z_tpll,
@@ -645,7 +677,7 @@ def regrid_era5_to_cartesian(
         'center_latitude': geometry['center_latitude'],
         'center_longitude': geometry['center_longitude'],
         'planet_radius': EARTH_RADIUS,
-        'planet_gravity': EARTH_GRAVITY,
+        'planet_gravity': gravity,
         'time_units': 'hours since 1900-01-01 00:00:00',
         'nx1': geometry['cells']['nx1'],
         'nx2': geometry['cells']['nx2'],
