@@ -60,7 +60,7 @@ forcing:
 # 
 # 1. Geographic bounds calculation:
 #    - Domain size: ~150 km × ~150 km (x2 × x3)
-#    - Center: 32.5°N, -106.3°
+#    - Center: 32.5°N, -106.3°W
 #    - Approximate bounds: ~31.8°N to ~33.2°N, ~-107.0° to ~-105.6°
 #    - With 10% buffer: ~31.7°N to ~33.3°N, ~-107.1° to ~-105.5°
 #
