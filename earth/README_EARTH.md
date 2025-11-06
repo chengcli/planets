@@ -6,6 +6,21 @@ This directory contains an API for accessing and analyzing Earth's weather and c
 
 For accessing the ECMWF Climate Data Store (CDS), read the instructions at `ecmwf/README_ECMWF.md`.
 
+## Regional Weather Prediction Pipelines
+
+### White Sands Missile Range
+Complete weather data pipeline for the White Sands test area in New Mexico (October 2025).
+- **Location**: `white_sands/`
+- **Documentation**: See `white_sands/README.md`
+- **Configuration**: `white_sands/white_sands.yaml`
+- **Quick start**: `cd white_sands && python download_white_sands_data.py`
+
+### ECMWF Data Curation
+General-purpose ECMWF ERA5 data access and processing tools.
+- **Location**: `ecmwf/`
+- **Documentation**: See `ecmwf/README_ECMWF.md`
+- **Complete 4-step pipeline**: Fetch, Calculate Density, Regrid, Compute Pressure
+
 ## Configuration files
 
 The following configuration files might be created:

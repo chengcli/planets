@@ -1,0 +1,94 @@
+# White Sands Weather Prediction Pipeline Configuration
+# 
+# White Sands Missile Range, New Mexico
+# This configuration covers the test area with required buffer zones
+#
+# Range of Entire Test Area:
+# - Longitude bounds: 106.7W - 106.2W
+# - Latitude bounds: 32.6N - 33.6N
+#
+# With 0.5 degree buffer area on each side:
+# - Longitude bounds with buffer: 107.2W - 105.7W
+# - Latitude bounds with buffer: 32.1N - 34.1N
+#
+# Time window:
+# - Start date: 2025-10-01
+# - End date: 2025-10-02
+
+geometry:
+  # Cartesian geometry for atmospheric simulations
+  type: cartesian
+  
+  # Domain bounds in meters (includes ghost zones)
+  # x1 = Z direction (vertical, height above ground)
+  # x2 = Y direction (north-south distance)
+  # x3 = X direction (east-west distance)
+  bounds:
+    x1min: 0.0             # Ground level (meters)
+    x1max: 15000.0         # 15 km vertical extent (covers troposphere)
+    x2min: 0.0             # South edge (meters, including ghost)
+    x2max: 222640.0        # ~222.64 km north-south extent (2.0 degrees with buffer)
+    x3min: 0.0             # West edge (meters, including ghost)
+    x3max: 139800.0        # ~139.8 km east-west extent (1.5 degrees with buffer)
+  
+  # Grid cell configuration
+  # Total cells = interior cells + 2 × nghost in each direction
+  cells:
+    nx1: 150               # Interior cells in vertical direction
+    nx2: 400               # Interior cells in north-south direction
+    nx3: 300               # Interior cells in east-west direction
+    nghost: 3              # Number of ghost cells on each side
+  
+  # Geographic center of the computational domain
+  # White Sands test area with buffer
+  center_latitude: 33.1    # degrees north (center of 32.1N to 34.1N)
+  center_longitude: -106.45 # degrees (center of 107.2W to 105.7W)
+
+integration:
+  # Integration parameters for atmospheric model
+  type: rk3                # Runge-Kutta 3rd order time integration
+  cfl: 0.45                # CFL number for stability
+  implicit-scheme: 0       # Explicit time integration
+  nlim: -1                 # No step limit
+  tlim: 172800             # 2 days simulation time (seconds)
+  
+  # Date range for fetching ERA5 data (YYYY-MM-DD format)
+  # October 1-2, 2025 (2 days of data as specified in requirements)
+  # Note: ERA5 data availability depends on ECMWF release schedule
+  # If data is not yet available for these dates, use a past date range
+  start-date: 2025-10-01
+  end-date: 2025-10-02
+
+forcing:
+  # Gravity for hydrostatic balance calculations
+  # Note: grav1 is negative because gravity points downward
+  const-gravity:
+    grav1: -9.80665        # m/s² (Earth's standard gravity)
+
+# Expected pipeline output:
+# 
+# 1. Geographic bounds calculation:
+#    - Domain size: ~222.64 km × ~139.8 km (north-south × east-west)
+#    - Center: 33.1°N, -106.45°W
+#    - Covers: 32.1°N to 34.1°N, 107.2°W to 105.7°W
+#    - Includes 0.5 degree buffer on all sides of test area
+#
+# 2. Output directory name: e.g., 32.10N_34.10N_107.20W_105.70W/
+#
+# 3. Downloaded files:
+#    - era5_hourly_densities_20251001.nc
+#    - era5_hourly_densities_20251002.nc
+#    - era5_hourly_dynamics_20251001.nc
+#    - era5_hourly_dynamics_20251002.nc
+#
+# Usage:
+#   Step 1: python download_white_sands_data.py
+#   Or: python ../ecmwf/fetch_era5_pipeline.py white_sands.yaml
+#
+# Notes:
+# - White Sands is located in the Chihuahuan Desert, south-central New Mexico
+# - Elevation: approximately 1200-1300 meters above sea level
+# - October weather: generally dry, mild temperatures, occasional monsoon remnants
+# - Surface pressure typically around 870-880 hPa due to elevation
+# - The 15 km vertical extent covers the troposphere and lower stratosphere
+# - Domain captures mesoscale features and boundary layer processes
