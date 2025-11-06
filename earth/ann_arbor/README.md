@@ -7,7 +7,7 @@ This directory contains the weather data curation and processing pipeline for An
 The Ann Arbor weather prediction pipeline downloads and processes ERA5 reanalysis data from ECMWF for atmospheric modeling and simulation. The pipeline covers:
 
 - **Test Area**: Ann Arbor, Michigan (University of Michigan campus)
-- **Center Coordinates**: 42.3°N, 83.7°W
+- **Center Coordinates**: 42.3°N, -83.7°W
 - **Domain Size**: 125 km × 125 km horizontal, 15 km vertical
 - **Time Window**: November 1, 2025
 - **Vertical Extent**: Surface to 15 km altitude
@@ -149,7 +149,7 @@ The `ann_arbor.yaml` file defines:
 
 - **Geometry**: Cartesian domain with 150×200×200 interior cells plus 3 ghost cells on each side
 - **Bounds**: 15 km vertical, 125 km × 125 km horizontal
-- **Center**: 42.3°N, 83.7°W (University of Michigan campus)
+- **Center**: 42.3°N, -83.7°W (University of Michigan campus)
 - **Time**: November 1, 2025
 - **Grid**: High-resolution atmospheric grid for mesoscale modeling
 
