@@ -53,7 +53,9 @@ integration:
   tlim: 172800             # 2 days simulation time (seconds)
   
   # Date range for fetching ERA5 data (YYYY-MM-DD format)
-  # October 1-2, 2025 (2 days of data as specified)
+  # October 1-2, 2025 (2 days of data as specified in requirements)
+  # Note: ERA5 data availability depends on ECMWF release schedule
+  # If data is not yet available for these dates, use a past date range
   start-date: 2025-10-01
   end-date: 2025-10-02
 

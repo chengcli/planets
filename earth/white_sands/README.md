@@ -8,9 +8,11 @@ The White Sands weather prediction pipeline downloads and processes ERA5 reanaly
 
 - **Test Area**: Longitude 106.7°W - 106.2°W, Latitude 32.6°N - 33.6°N
 - **With Buffer**: Longitude 107.2°W - 105.7°W, Latitude 32.1°N - 34.1°N (0.5° buffer on each side)
-- **Time Window**: October 1-2, 2025
+- **Time Window**: October 1-2, 2025 (as specified in requirements)
 - **Vertical Extent**: Surface to 15 km altitude
 - **Domain Size**: ~223 km (N-S) × ~140 km (E-W)
+
+**Note on Data Availability**: ERA5 data is typically released with a 5-day delay. If October 2025 data is not yet available, you can modify the dates in `white_sands.yaml` to use a different time period while keeping the same spatial configuration.
 
 ## Quick Start
 
@@ -56,9 +58,6 @@ python download_white_sands_data.py --output-base ./data
 
 # Use more parallel download jobs
 python download_white_sands_data.py --jobs 4
-
-# Skip fetching if data already exists
-python download_white_sands_data.py --skip-fetch --output-base ./data
 ```
 
 ## Pipeline Steps
