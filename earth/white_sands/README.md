@@ -55,9 +55,6 @@ For more control:
 ```bash
 # Download to specific directory
 python download_white_sands_data.py --output-base ./data
-
-# Use more parallel download jobs
-python download_white_sands_data.py --jobs 4
 ```
 
 ## Pipeline Steps
@@ -187,8 +184,7 @@ python download_white_sands_data.py
 ```bash
 python download_white_sands_data.py \
     --config white_sands.yaml \
-    --output-base ./october_2025_data \
-    --jobs 4
+    --output-base ./october_2025_data
 ```
 
 ### Complete Pipeline from Scratch
@@ -258,7 +254,6 @@ ERROR: You must accept the license agreement
 ### Download Timeout
 **Solution**: 
 - Reduce time period or spatial extent
-- Use fewer parallel jobs
 - Try again later when CDS load is lower
 
 ### Missing Dependencies
@@ -278,16 +273,6 @@ Edit `white_sands.yaml` to change:
 - Resolution: Modify `cells` (nx1, nx2, nx3)
 - Center location: Modify `center_latitude`, `center_longitude`
 - Time period: Modify `start-date`, `end-date`
-
-### Parallel Downloads
-Control parallelism with `--jobs` flag:
-```bash
-# Download with 8 parallel jobs (faster but higher load)
-python download_white_sands_data.py --jobs 8
-
-# Serial download (slower but more reliable)
-python download_white_sands_data.py --jobs 1
-```
 
 ## Documentation
 

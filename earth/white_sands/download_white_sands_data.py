@@ -24,14 +24,13 @@ Usage:
 Options:
     --config PATH           Path to YAML configuration file (default: white_sands.yaml)
     --output-base PATH      Base directory for output files (default: current directory)
-    --jobs N                Number of parallel download jobs (default: 2)
 
 Examples:
     # Download data using default configuration
     python download_white_sands_data.py
 
-    # Download to specific directory with more parallel jobs
-    python download_white_sands_data.py --output-base ./data --jobs 4
+    # Download to specific directory
+    python download_white_sands_data.py --output-base ./data
 
 Requirements:
     - ECMWF CDS API credentials configured (~/.cdsapirc or CDSAPI_KEY env var)
@@ -143,13 +142,6 @@ def main():
         help="Base directory for output files (default: current directory)"
     )
     
-    parser.add_argument(
-        "--jobs",
-        type=int,
-        default=2,
-        help="Number of parallel download jobs (default: 2)"
-    )
-    
     args = parser.parse_args()
     
     # Resolve paths
@@ -169,7 +161,6 @@ def main():
     print("="*70)
     print(f"Configuration: {config_path}")
     print(f"Output base: {output_base}")
-    print(f"Parallel jobs: {args.jobs}")
     print()
     
     # Check credentials before starting
@@ -180,8 +171,8 @@ def main():
     fetch_script = ECMWF_DIR / "fetch_era5_pipeline.py"
     step1_success = run_step(
         "Step 1: Fetch ERA5 Data",
-        ["python", str(fetch_script), str(config_path), 
-         "--output-base", str(output_base), "--jobs", str(args.jobs)],
+        ["python3", str(fetch_script), str(config_path), 
+         "--output-base", str(output_base)],
         skip=False
     )
     
