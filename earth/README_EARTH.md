@@ -15,6 +15,13 @@ Complete weather data pipeline for the White Sands test area in New Mexico (Octo
 - **Configuration**: `white_sands/white_sands.yaml`
 - **Quick start**: `cd white_sands && python download_white_sands_data.py`
 
+### Ann Arbor, Michigan
+Complete weather data pipeline for Ann Arbor, Michigan (November 2025).
+- **Location**: `ann_arbor/`
+- **Documentation**: See `ann_arbor/README.md`
+- **Configuration**: `ann_arbor/ann_arbor.yaml`
+- **Quick start**: `cd ann_arbor && python download_ann_arbor_data.py`
+
 ### ECMWF Data Curation
 General-purpose ECMWF ERA5 data access and processing tools.
 - **Location**: `ecmwf/`
