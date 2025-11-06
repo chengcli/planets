@@ -38,36 +38,51 @@ The White Sands weather prediction pipeline downloads and processes ERA5 reanaly
    pip install -r ../ecmwf/requirements.txt
    ```
 
-### Download and Process Data
+### Automated Pipeline (Recommended)
 
-Run the complete pipeline:
+Run the complete automated pipeline that executes all 4 steps:
 
 ```bash
 python download_white_sands_data.py
 ```
 
-This will:
-1. Download ERA5 data for the specified region and time period
-2. Save data files in a directory named with geographic bounds (e.g., `32.10N_34.10N_107.20W_105.70W/`)
+This will automatically:
+1. Download ERA5 data (Step 1)
+2. Calculate air density (Step 2)
+3. Regrid to Cartesian coordinates (Step 3)
+4. Compute hydrostatic pressure (Step 4)
 
-For more control:
+The script includes:
+- **Automatic step detection**: Finds output directory from Step 1
+- **Progress checking**: Waits for files from each step before proceeding
+- **Timeout handling**: Aborts with error if steps take too long (default: 1 hour per step)
+- **Partial execution**: Can stop after any step with `--stop-after`
+
+Advanced options:
 
 ```bash
+# Run only first 2 steps
+python download_white_sands_data.py --stop-after 2
+
+# Use custom timeout (2 hours per step)
+python download_white_sands_data.py --timeout 7200
+
 # Download to specific directory
 python download_white_sands_data.py --output-base ./data
 ```
 
 ## Pipeline Steps
 
-The data curation pipeline consists of 4 steps:
+The data curation pipeline consists of 4 steps that are now automated:
 
 ### Step 1: Fetch ERA5 Data
 
 Downloads ERA5 reanalysis data from ECMWF Climate Data Store.
 
+**Automated**: Yes (via `download_white_sands_data.py`)
+
+**Manual option**:
 ```bash
-python download_white_sands_data.py
-# or directly:
 python ../ecmwf/fetch_era5_pipeline.py white_sands.yaml
 ```
 
@@ -83,6 +98,9 @@ python ../ecmwf/fetch_era5_pipeline.py white_sands.yaml
 
 Computes total air density from dynamics and density variables.
 
+**Automated**: Yes (via `download_white_sands_data.py`)
+
+**Manual option**:
 ```bash
 python ../ecmwf/calculate_density.py \
     --input-dir <output_dir> \
@@ -98,6 +116,9 @@ python ../ecmwf/calculate_density.py \
 
 Transforms pressure-level data to height-based Cartesian grid suitable for finite-volume methods.
 
+**Automated**: Yes (via `download_white_sands_data.py`)
+
+**Manual option**:
 ```bash
 python ../ecmwf/regrid_era5_to_cartesian.py \
     white_sands.yaml <output_dir> \
@@ -111,6 +132,9 @@ python ../ecmwf/regrid_era5_to_cartesian.py \
 
 Ensures hydrostatic balance in the regridded data.
 
+**Automated**: Yes (via `download_white_sands_data.py`)
+
+**Manual option**:
 ```bash
 python ../ecmwf/compute_hydrostatic_pressure.py \
     white_sands.yaml regridded_white_sands.nc
@@ -175,22 +199,38 @@ After running the complete pipeline, you will have:
 
 ## Usage Examples
 
-### Basic Download
+### Automated Pipeline (Recommended)
 ```bash
+# Run complete pipeline with all 4 steps
 python download_white_sands_data.py
 ```
 
-### Download with Custom Settings
+### Partial Pipeline Execution
+```bash
+# Run only Step 1 (download data)
+python download_white_sands_data.py --stop-after 1
+
+# Run Steps 1-2 (download and calculate density)
+python download_white_sands_data.py --stop-after 2
+
+# Run with custom timeout (2 hours per step)
+python download_white_sands_data.py --timeout 7200
+```
+
+### Custom Output Directory
 ```bash
 python download_white_sands_data.py \
     --config white_sands.yaml \
     --output-base ./october_2025_data
 ```
 
-### Complete Pipeline from Scratch
+### Manual Pipeline Execution (Advanced)
+
+If you need to run steps manually (e.g., for debugging):
+
 ```bash
 # Step 1: Download
-python download_white_sands_data.py --output-base ./data
+python ../ecmwf/fetch_era5_pipeline.py white_sands.yaml --output-base ./data
 
 # Step 2: Calculate density (assuming output dir is 32.10N_34.10N_107.20W_105.70W)
 python ../ecmwf/calculate_density.py \
@@ -200,11 +240,11 @@ python ../ecmwf/calculate_density.py \
 # Step 3: Regrid
 python ../ecmwf/regrid_era5_to_cartesian.py \
     white_sands.yaml ./data/32.10N_34.10N_107.20W_105.70W \
-    --output ./data/regridded_white_sands.nc
+    --output ./data/32.10N_34.10N_107.20W_105.70W/regridded_white_sands.nc
 
 # Step 4: Compute pressure
 python ../ecmwf/compute_hydrostatic_pressure.py \
-    white_sands.yaml ./data/regridded_white_sands.nc
+    white_sands.yaml ./data/32.10N_34.10N_107.20W_105.70W/regridded_white_sands.nc
 ```
 
 ### Process Existing Data
