@@ -1,0 +1,17 @@
+# Processing pipeline of high-resolution weather prediction at White Sands
+
+1. Range of Entire Test Area
+
+Longitude bounds: 106.7W - 106.2W
+Latitude bounds: 32.6N - 33.6N
+
+2. Add 0.5 degree buffer area on each side
+
+Longitude bounds with buffer: 107.2W - 105.7W
+Latitude bounds with buffer: 32.1N - 34.1N
+
+3. Time window
+
+Start date: 2025-10-01
+End data: 2025-10-02
+

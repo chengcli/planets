@@ -8,4 +8,3 @@ from the Climate Data Store (CDS).
 from .ecmwf_weather_api import ECMWFWeatherAPI, create_api
 
 __all__ = ['ECMWFWeatherAPI', 'create_api']
-__version__ = '1.0.0'
