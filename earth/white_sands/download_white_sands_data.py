@@ -3,9 +3,12 @@
 White Sands Weather Data Download Script
 
 This script downloads ERA5 weather data for the White Sands test area using
-the ECMWF data curation pipeline. It executes the complete 4-step pipeline:
+the ECMWF data curation pipeline.
 
+This script executes Step 1 of the 4-step pipeline:
 Step 1: Fetch ERA5 data (dynamics and densities)
+
+After downloading, you can manually run the remaining steps:
 Step 2: Calculate air density from downloaded data
 Step 3: Regrid to Cartesian coordinates
 Step 4: Compute hydrostatic pressure
@@ -21,24 +24,14 @@ Usage:
 Options:
     --config PATH           Path to YAML configuration file (default: white_sands.yaml)
     --output-base PATH      Base directory for output files (default: current directory)
-    --skip-fetch            Skip the data fetching step (use existing data)
-    --skip-density          Skip density calculation step
-    --skip-regrid           Skip regridding step
-    --skip-pressure         Skip pressure computation step
     --jobs N                Number of parallel download jobs (default: 2)
 
 Examples:
-    # Download all data and run complete pipeline
+    # Download data using default configuration
     python download_white_sands_data.py
 
-    # Download to specific directory
-    python download_white_sands_data.py --output-base ./data
-
-    # Run only steps 2-4 with existing data
-    python download_white_sands_data.py --skip-fetch --output-base ./data
-
-    # Download with more parallel jobs
-    python download_white_sands_data.py --jobs 4
+    # Download to specific directory with more parallel jobs
+    python download_white_sands_data.py --output-base ./data --jobs 4
 
 Requirements:
     - ECMWF CDS API credentials configured (~/.cdsapirc or CDSAPI_KEY env var)
@@ -133,7 +126,7 @@ def run_step(step_name, command, skip=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Download and process White Sands weather data",
+        description="Download White Sands ERA5 weather data (Step 1 of pipeline)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -148,30 +141,6 @@ def main():
         "--output-base",
         default=".",
         help="Base directory for output files (default: current directory)"
-    )
-    
-    parser.add_argument(
-        "--skip-fetch",
-        action="store_true",
-        help="Skip the data fetching step (use existing data)"
-    )
-    
-    parser.add_argument(
-        "--skip-density",
-        action="store_true",
-        help="Skip density calculation step"
-    )
-    
-    parser.add_argument(
-        "--skip-regrid",
-        action="store_true",
-        help="Skip regridding step"
-    )
-    
-    parser.add_argument(
-        "--skip-pressure",
-        action="store_true",
-        help="Skip pressure computation step"
     )
     
     parser.add_argument(
@@ -196,7 +165,7 @@ def main():
         return 1
     
     print("="*70)
-    print("White Sands Weather Data Download Pipeline")
+    print("White Sands Weather Data Download (Step 1)")
     print("="*70)
     print(f"Configuration: {config_path}")
     print(f"Output base: {output_base}")
@@ -204,9 +173,8 @@ def main():
     print()
     
     # Check credentials before starting
-    if not args.skip_fetch:
-        if not check_cds_credentials():
-            return 1
+    if not check_cds_credentials():
+        return 1
     
     # Step 1: Fetch ERA5 data
     fetch_script = ECMWF_DIR / "fetch_era5_pipeline.py"
@@ -214,24 +182,24 @@ def main():
         "Step 1: Fetch ERA5 Data",
         ["python", str(fetch_script), str(config_path), 
          "--output-base", str(output_base), "--jobs", str(args.jobs)],
-        skip=args.skip_fetch
+        skip=False
     )
     
     if not step1_success:
-        print("\n✗ Pipeline failed at Step 1")
+        print("\n✗ Data download failed")
         return 1
     
-    # Determine output directory name
-    # The fetch script creates a directory named with lat-lon bounds
-    # We need to find it or calculate it
-    # For now, we'll use a placeholder - in practice, the script would need to
-    # parse the output or calculate the expected directory name
-    print("\nNote: After Step 1, locate the output directory (e.g., 32.10N_34.10N_107.20W_105.70W)")
-    print("      Then use it as input for the remaining steps.")
+    # Instructions for remaining steps
+    print("\n" + "="*70)
+    print("Data download completed successfully!")
+    print("="*70)
     print()
-    print("Example commands for remaining steps:")
+    print("The ERA5 data has been downloaded to a directory with geographic bounds")
+    print("in its name (e.g., 32.10N_34.10N_107.20W_105.70W/).")
     print()
-    print("Step 2: Calculate density")
+    print("To complete the pipeline, run the following steps manually:")
+    print()
+    print("Step 2: Calculate air density")
     print("  python ../ecmwf/calculate_density.py \\")
     print("    --input-dir <output_dir> \\")
     print("    --output-dir <output_dir>")
@@ -245,22 +213,7 @@ def main():
     print("  python ../ecmwf/compute_hydrostatic_pressure.py \\")
     print("    white_sands.yaml regridded_white_sands.nc")
     print()
-    
-    # Note: Steps 2-4 would require knowing the exact output directory name
-    # which depends on the calculated lat-lon bounds. For a complete implementation,
-    # we would need to either:
-    # 1. Parse the output of Step 1 to get the directory name
-    # 2. Recalculate the bounds using the same logic as fetch_era5_pipeline.py
-    # 3. Make fetch_era5_pipeline.py return/print the directory name
-    
-    print("="*70)
-    print("Pipeline execution completed!")
-    print("="*70)
-    print()
-    print("Next steps:")
-    print("1. Verify the downloaded data in the output directory")
-    print("2. Run steps 2-4 manually with the output directory path")
-    print("3. Use the regridded data for White Sands simulations")
+    print("See README.md for detailed instructions and examples.")
     print()
     
     return 0
