@@ -84,7 +84,7 @@ def process_geojson(output_file, max_vertices=50):
         f.write("# US States Location Table\n")
         f.write("# Format: location_id\tname\tpolygon_vertices\n")
         f.write("# polygon_vertices format: lon1,lat1;lon2,lat2;lon3,lat3;...\n")
-        f.write(f"# Vertices represent actual state boundaries (simplified to 13-{max_vertices} vertices per state)\n")
+        f.write(f"# Vertices represent actual state boundaries (simplified to up to {max_vertices} vertices per state)\n")
         f.write("# Vertices are in counterclockwise order\n")
         f.write("# Longitude: negative for West, positive for East\n")
         f.write("# Latitude: negative for South, positive for North\n")

@@ -130,8 +130,8 @@ def plot_states(locations_file, states_to_plot=None, projection_name='PlateCarre
         # Full US extent
         ax.set_extent([-130, -65, 24, 50], crs=ccrs.PlateCarree())
     
-    # Add coastlines and features (use stock features to avoid downloads)
-    # Note: If running without internet, map features may not be available
+    # Add coastlines and features
+    # Note: Cartopy may download Natural Earth data on first use if not cached locally
     ax.coastlines(resolution='110m', linewidth=0.5, color='black')
     ax.add_feature(cfeature.BORDERS.with_scale('110m'), linewidth=0.5, edgecolor='gray')
     
