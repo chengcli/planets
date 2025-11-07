@@ -70,6 +70,20 @@ class TestLocationTable(unittest.TestCase):
             self.assertIn('longitude', center)
             self.assertIsInstance(center['latitude'], float)
             self.assertIsInstance(center['longitude'], float)
+    
+    def test_calculate_domain_extents(self):
+        """Test domain extent calculation from polygon."""
+        locations = generate_config.load_locations(self.locations_file)
+        
+        for loc_id, loc_data in locations.items():
+            extents = generate_config.calculate_domain_extents(loc_data['polygon'])
+            self.assertIn('x2_extent', extents)
+            self.assertIn('x3_extent', extents)
+            self.assertIsInstance(extents['x2_extent'], float)
+            self.assertIsInstance(extents['x3_extent'], float)
+            # Check that extents are positive
+            self.assertGreater(extents['x2_extent'], 0)
+            self.assertGreater(extents['x3_extent'], 0)
 
 
 class TestLocationIDValidation(unittest.TestCase):
@@ -156,7 +170,7 @@ class TestConfigGeneration(unittest.TestCase):
     
     def test_generate_ann_arbor_config(self):
         """Test generating Ann Arbor configuration."""
-        # Mock args with required parameters
+        # Mock args with required parameters (x2/x3-extent now calculated)
         class Args:
             start_date = '2025-11-01'
             end_date = '2025-11-01'
@@ -165,8 +179,8 @@ class TestConfigGeneration(unittest.TestCase):
             nx3 = 200
             nghost = 3
             x1_max = 15000.0
-            x2_extent = 125000.0
-            x3_extent = 125000.0
+            x2_extent = None  # Now calculated from polygon
+            x3_extent = None  # Now calculated from polygon
             tlim = 43200
         
         args = Args()
@@ -189,8 +203,8 @@ class TestConfigGeneration(unittest.TestCase):
             nx3 = 300
             nghost = 3
             x1_max = 15000.0
-            x2_extent = 222640.0
-            x3_extent = 139800.0
+            x2_extent = None  # Now calculated from polygon
+            x3_extent = None  # Now calculated from polygon
             tlim = 172800
         
         args = Args()
@@ -213,8 +227,8 @@ class TestConfigGeneration(unittest.TestCase):
             nx3 = 300
             nghost = 3
             x1_max = 15000.0
-            x2_extent = 125000.0
-            x3_extent = 125000.0
+            x2_extent = None  # Use calculated value
+            x3_extent = None  # Use calculated value
             tlim = 172800
         
         args = Args()
@@ -240,8 +254,8 @@ class TestConfigGeneration(unittest.TestCase):
             nx3 = 200
             nghost = 3
             x1_max = 15000.0
-            x2_extent = 125000.0
-            x3_extent = 125000.0
+            x2_extent = None
+            x3_extent = None
             tlim = 43200
         
         args = Args()

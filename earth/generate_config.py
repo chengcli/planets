@@ -78,6 +78,44 @@ def calculate_center(polygon):
     }
 
 
+def calculate_domain_extents(polygon):
+    """
+    Calculate domain extents (x2, x3) from polygon bounds in meters.
+    
+    Uses approximate conversion: 1 degree latitude = 111 km, 
+    1 degree longitude = 111 km * cos(latitude).
+    
+    Returns:
+        dict: {'x2_extent': north-south extent in meters, 
+               'x3_extent': east-west extent in meters}
+    """
+    import math
+    
+    lons = [p[0] for p in polygon]
+    lats = [p[1] for p in polygon]
+    
+    # Get bounds
+    lat_min, lat_max = min(lats), max(lats)
+    lon_min, lon_max = min(lons), max(lons)
+    
+    # Calculate north-south extent (latitude)
+    # 1 degree latitude ≈ 111 km
+    lat_extent_deg = lat_max - lat_min
+    x2_extent = lat_extent_deg * 111000.0  # meters
+    
+    # Calculate east-west extent (longitude)
+    # 1 degree longitude = 111 km * cos(latitude)
+    # Use average latitude for the calculation
+    avg_lat = (lat_min + lat_max) / 2.0
+    lon_extent_deg = lon_max - lon_min
+    x3_extent = lon_extent_deg * 111000.0 * math.cos(math.radians(avg_lat))  # meters
+    
+    return {
+        'x2_extent': x2_extent,
+        'x3_extent': x3_extent
+    }
+
+
 def load_template(template_file):
     """Load the template configuration file."""
     with open(template_file, 'r') as f:
@@ -155,17 +193,16 @@ def generate_config(location_id, locations, template, args):
     nx3 = args.nx3
     nghost = args.nghost if args.nghost is not None else 3  # Default nghost to 3
     
-    # Domain size (required)
+    # Domain size
     if not args.x1_max:
         raise ValueError("--x1-max (vertical extent in meters) is required")
-    if not args.x2_extent:
-        raise ValueError("--x2-extent (north-south extent in meters) is required")
-    if not args.x3_extent:
-        raise ValueError("--x3-extent (east-west extent in meters) is required")
     
     x1_max = args.x1_max
-    x2_extent = args.x2_extent
-    x3_extent = args.x3_extent
+    
+    # Calculate horizontal extents from polygon bounds (or use overrides if provided)
+    domain_extents = calculate_domain_extents(location['polygon'])
+    x2_extent = args.x2_extent if args.x2_extent is not None else domain_extents['x2_extent']
+    x3_extent = args.x3_extent if args.x3_extent is not None else domain_extents['x3_extent']
     
     # Time limit (required)
     if not args.tlim:
@@ -293,13 +330,13 @@ def main():
     parser.add_argument(
         '--x2-extent',
         type=float,
-        help="North-south extent in meters [REQUIRED unless --list]"
+        help="North-south extent in meters [OPTIONAL - calculated from polygon if not specified]"
     )
     
     parser.add_argument(
         '--x3-extent',
         type=float,
-        help="East-west extent in meters [REQUIRED unless --list]"
+        help="East-west extent in meters [OPTIONAL - calculated from polygon if not specified]"
     )
     
     parser.add_argument(
