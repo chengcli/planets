@@ -4,6 +4,8 @@
 # Vertices are bounding boxes in counterclockwise order (SW, SE, NE, NW)
 # Longitude: negative for West, positive for East
 # Latitude: negative for South, positive for North
+# Note: Alaska uses extended western longitude (-188.9°) to maintain consistency
+#       across the International Date Line. For simulations, consider regional subsets.
 location_id	name	polygon_vertices
 alabama	Alabama	-88.471115,30.247195;-84.889196,30.247195;-84.889196,35.00118;-88.471115,35.00118
 alaska	Alaska	-188.90491,51.61274;-129.986323,51.61274;-129.986323,71.351633;-188.90491,71.351633
