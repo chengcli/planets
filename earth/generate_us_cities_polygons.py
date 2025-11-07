@@ -40,6 +40,7 @@ import time
 import urllib.request
 import urllib.error
 import urllib.parse
+import re
 from pathlib import Path
 
 
@@ -127,7 +128,6 @@ def location_id_from_city_state(city, state_abbr):
     Format: cityname-stateabbr (e.g., 'pasadena-ca')
     """
     # Remove special characters and convert to lowercase
-    import re
     city_clean = city.lower()
     # Replace spaces, apostrophes, and other punctuation with hyphens
     city_clean = re.sub(r"['\s.,()\[\]]+", '-', city_clean)

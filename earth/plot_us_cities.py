@@ -22,7 +22,7 @@ Usage:
     python plot_us_cities.py --projection LambertConformal --cities seattle-wa
 
     # Save to file instead of displaying
-    python plot_us_cities.py --output us_cities_map.png --states California
+    python plot_us_cities.py --output us_cities_map.png --states CA
 
 Available projections:
     - PlateCarree (default): Simple lat-lon projection
