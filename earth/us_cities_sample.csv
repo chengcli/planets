@@ -1,0 +1,21 @@
+# US Cities Location Table
+# Format: location_id	name	polygon_vertices
+# location_id format: cityname-stateabbr (e.g., 'pasadena-ca')
+# polygon_vertices format: lon1,lat1;lon2,lat2;lon3,lat3;...
+# Vertices represent city boundaries (simplified to up to 50 vertices)
+# Vertices are in counterclockwise order
+# Longitude: negative for West, positive for East
+# Latitude: negative for South, positive for North
+# Data source: OpenStreetMap via Nominatim API (sample data for testing)
+location_id	name	polygon_vertices
+pasadena-ca	Pasadena, California	-118.2,34.1;-118.2,34.2;-118.1,34.2;-118.1,34.1
+los-angeles-ca	Los Angeles, California	-118.7,33.7;-118.7,34.3;-118.1,34.3;-118.1,33.7
+san-diego-ca	San Diego, California	-117.3,32.5;-117.3,33.0;-116.9,33.0;-116.9,32.5
+san-francisco-ca	San Francisco, California	-122.5,37.7;-122.5,37.8;-122.4,37.8;-122.4,37.7
+austin-tx	Austin, Texas	-97.9,30.2;-97.9,30.4;-97.6,30.4;-97.6,30.2
+houston-tx	Houston, Texas	-95.8,29.6;-95.8,30.1;-95.1,30.1;-95.1,29.6
+dallas-tx	Dallas, Texas	-97.0,32.6;-97.0,33.0;-96.6,33.0;-96.6,32.6
+chicago-il	Chicago, Illinois	-87.9,41.6;-87.9,42.0;-87.5,42.0;-87.5,41.6
+new-york-ny	New York, New York	-74.1,40.5;-74.1,40.9;-73.7,40.9;-73.7,40.5
+boston-ma	Boston, Massachusetts	-71.2,42.2;-71.2,42.4;-71.0,42.4;-71.0,42.2
+seattle-wa	Seattle, Washington	-122.5,47.5;-122.5,47.7;-122.2,47.7;-122.2,47.5

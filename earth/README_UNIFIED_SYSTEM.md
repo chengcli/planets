@@ -6,17 +6,42 @@ This directory contains a unified system for managing atmospheric simulation con
 
 The unified system consists of:
 
-1. **Location Table** (`locations.csv`): Tab-delimited file defining location identifiers, names, and polygon bounds
+1. **Location Tables**: Tab-delimited files defining location identifiers, names, and polygon bounds
+   - `locations.csv`: Original locations (Ann Arbor, White Sands)
+   - `us_states.csv`: US state boundaries (see `README_US_STATES.md`)
+   - `us_cities.csv`: Major US city boundaries (see `README_US_CITIES.md`)
 2. **Configuration Template** (`config_template.yaml`): Template YAML file with placeholders for location-specific values
 3. **Configuration Generator** (`generate_config.py`): Generates location-specific YAML files from the template
 4. **Unified Download Script** (`download_location_data.py`): Single script that works with any configured location
+
+## Location Database Options
+
+The system supports multiple location databases:
+
+```bash
+# Use default locations.csv
+python generate_config.py ann-arbor
+
+# Use US states database
+python generate_config.py california --locations-file us_states.csv
+
+# Use US cities database  
+python generate_config.py pasadena-ca --locations-file us_cities.csv
+```
 
 ## Quick Start
 
 ### List Available Locations
 
 ```bash
+# List locations from default database
 python generate_config.py --list
+
+# List US states
+python generate_config.py --list --locations-file us_states.csv
+
+# List US cities
+python generate_config.py --list --locations-file us_cities.csv
 ```
 
 This shows all configured locations with their geographic bounds and calculated center points.

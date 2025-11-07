@@ -2,6 +2,16 @@
 
 This directory contains an API for accessing and analyzing Earth's weather and climate data. The API provides several endpoints for retrieving current weather conditions, historical climate data, and forecasts.
 
+## Location Databases
+
+The Earth directory includes several location databases with polygon boundaries:
+
+- **locations.csv**: Original location database (Ann Arbor, White Sands)
+- **us_states.csv**: US state boundaries with actual polygon data (see `README_US_STATES.md`)
+- **us_cities.csv**: Major US city boundaries with polygon data (see `README_US_CITIES.md`)
+
+Each location is identified by a unique ID and includes polygon vertices for precise geographic boundaries.
+
 ## Installation
 
 For accessing the ECMWF Climate Data Store (CDS), read the instructions at `ecmwf/README_ECMWF.md`.
