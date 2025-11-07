@@ -219,34 +219,6 @@ The download script executes 4 steps:
 
 Each step can be run independently or stopped at any point using `--stop-after`.
 
-## Backward Compatibility
-
-For existing workflows using location-specific scripts:
-
-### Ann Arbor
-```bash
-# Old way (still works)
-cd ann_arbor
-python download_ann_arbor_data.py
-
-# New way (recommended)
-cd earth
-python download_location_data.py ann-arbor --config ann_arbor/ann_arbor.yaml
-```
-
-### White Sands
-```bash
-# Old way (still works)
-cd white_sands
-python download_white_sands_data.py
-
-# New way (recommended)
-cd earth
-python download_location_data.py white-sands --config white_sands/white_sands.yaml
-```
-
-Wrapper scripts are provided in location subdirectories for backward compatibility.
-
 ## Examples
 
 ### Generate Custom Configuration
@@ -287,14 +259,10 @@ earth/
 ├── generate_config.py                  # Config generator script
 ├── download_location_data.py           # Unified download script
 ├── ann_arbor/
-│   ├── ann_arbor.yaml                 # Ann Arbor config (generated)
-│   ├── download_ann_arbor_data.py     # Original (kept for compatibility)
-│   ├── download_ann_arbor_data_new.py # Wrapper script
+│   ├── ann_arbor.yaml                 # Ann Arbor config
 │   └── README.md
 ├── white_sands/
-│   ├── white_sands.yaml               # White Sands config (generated)
-│   ├── download_white_sands_data.py   # Original (kept for compatibility)
-│   ├── download_white_sands_data_new.py # Wrapper script
+│   ├── white_sands.yaml               # White Sands config
 │   └── README.md
 └── ecmwf/                             # ECMWF pipeline scripts
 ```

@@ -1,29 +1,10 @@
 # Ann Arbor Weather Prediction Pipeline
 
-This directory contains the weather data curation and processing pipeline for Ann Arbor, Michigan.
-
-> **✨ NEW: Unified Location System Available!**
-> 
-> A new unified system has been implemented that reduces code duplication and makes it easier to work with multiple locations. The new system provides:
-> - Single download script for all locations
-> - Easy configuration generation with command-line overrides
-> - Simple process for adding new locations
-> - Backward compatibility with existing scripts
-> 
-> **Quick Start with New System:**
-> ```bash
-> # From the earth directory
-> cd ..
-> python download_location_data.py ann-arbor
-> ```
-> 
-> See [`../README_UNIFIED_SYSTEM.md`](../README_UNIFIED_SYSTEM.md) for complete documentation.
-> 
-> **Legacy scripts in this directory still work** but the unified approach is recommended for new workflows.
+This directory contains the configuration for the Ann Arbor, Michigan weather data curation and processing pipeline.
 
 ## Overview
 
-The Ann Arbor weather prediction pipeline downloads and processes ERA5 reanalysis data from ECMWF for atmospheric modeling and simulation. The pipeline covers:
+The Ann Arbor location uses the unified Earth location system to download and process ERA5 reanalysis data from ECMWF for atmospheric modeling and simulation. The pipeline covers:
 
 - **Test Area**: Ann Arbor, Michigan (University of Michigan campus)
 - **Center Coordinates**: 42.3°N, -83.7°W
@@ -58,15 +39,16 @@ The Ann Arbor weather prediction pipeline downloads and processes ERA5 reanalysi
    pip install -r ../ecmwf/requirements.txt
    ```
 
-### Automated Pipeline (Recommended)
+### Download and Process Data
 
-Run the complete automated pipeline that executes all 4 steps:
+Run the unified pipeline from the earth directory:
 
 ```bash
-python download_ann_arbor_data.py
+cd ..
+python download_location_data.py ann-arbor
 ```
 
-This will automatically:
+This will automatically execute all 4 steps:
 1. Download ERA5 data (Step 1)
 2. Calculate air density (Step 2)
 3. Regrid to Cartesian coordinates (Step 3)
@@ -82,13 +64,23 @@ Advanced options:
 
 ```bash
 # Run only first 2 steps
-python download_ann_arbor_data.py --stop-after 2
+python download_location_data.py ann-arbor --stop-after 2
 
 # Use custom timeout (2 hours per step)
-python download_ann_arbor_data.py --timeout 7200
+python download_location_data.py ann-arbor --timeout 7200
 
 # Download to specific directory
-python download_ann_arbor_data.py --output-base ./data
+python download_location_data.py ann-arbor --output-base ./data
+```
+
+### Generate Custom Configuration
+
+To create a custom configuration file with different parameters:
+
+```bash
+cd ..
+python generate_config.py ann-arbor --start-date 2025-11-15 --end-date 2025-11-17 --output custom_ann_arbor.yaml
+python download_location_data.py ann-arbor --config custom_ann_arbor.yaml
 ```
 
 ## Pipeline Steps
@@ -98,8 +90,6 @@ The data curation pipeline consists of 4 steps that are now automated:
 ### Step 1: Fetch ERA5 Data
 
 Downloads ERA5 reanalysis data from ECMWF Climate Data Store.
-
-**Automated**: Yes (via `download_ann_arbor_data.py`)
 
 **Manual option**:
 ```bash
@@ -118,8 +108,6 @@ python ../ecmwf/fetch_era5_pipeline.py ann_arbor.yaml
 
 Computes total air density from dynamics and density variables.
 
-**Automated**: Yes (via `download_ann_arbor_data.py`)
-
 **Manual option**:
 ```bash
 python ../ecmwf/calculate_density.py \
@@ -136,8 +124,6 @@ python ../ecmwf/calculate_density.py \
 
 Transforms pressure-level data to height-based Cartesian grid suitable for finite-volume methods.
 
-**Automated**: Yes (via `download_ann_arbor_data.py`)
-
 **Manual option**:
 ```bash
 python ../ecmwf/regrid_era5_to_cartesian.py \
@@ -151,8 +137,6 @@ python ../ecmwf/regrid_era5_to_cartesian.py \
 ### Step 4: Compute Hydrostatic Pressure
 
 Ensures hydrostatic balance in the regridded data.
-
-**Automated**: Yes (via `download_ann_arbor_data.py`)
 
 **Manual option**:
 ```bash
@@ -172,11 +156,13 @@ The `ann_arbor.yaml` file defines:
 - **Time**: November 1, 2025
 - **Grid**: High-resolution atmospheric grid for mesoscale modeling
 
-Edit this file to customize:
-- Domain size and resolution
-- Time period
-- Geographic center
-- Grid cell counts
+To generate a custom configuration:
+```bash
+cd ..
+python generate_config.py ann-arbor [options]
+```
+
+See `../README_UNIFIED_SYSTEM.md` for all options.
 
 ## Output Data Structure
 
@@ -218,29 +204,37 @@ After running the complete pipeline, you will have:
 
 ## Usage Examples
 
-### Automated Pipeline (Recommended)
+### Run Complete Pipeline
 ```bash
+cd ..
 # Run complete pipeline with all 4 steps
-python download_ann_arbor_data.py
+python download_location_data.py ann-arbor
 ```
 
 ### Partial Pipeline Execution
 ```bash
+cd ..
 # Run only Step 1 (download data)
-python download_ann_arbor_data.py --stop-after 1
+python download_location_data.py ann-arbor --stop-after 1
 
 # Run Steps 1-2 (download and calculate density)
-python download_ann_arbor_data.py --stop-after 2
+python download_location_data.py ann-arbor --stop-after 2
 
 # Run with custom timeout (2 hours per step)
-python download_ann_arbor_data.py --timeout 7200
+python download_location_data.py ann-arbor --timeout 7200
 ```
 
-### Custom Output Directory
+### Custom Configuration
 ```bash
-python download_ann_arbor_data.py \
-    --config ann_arbor.yaml \
-    --output-base ./november_2025_data
+cd ..
+# Generate custom configuration
+python generate_config.py ann-arbor \
+    --start-date 2025-11-15 \
+    --end-date 2025-11-17 \
+    --output custom_ann_arbor.yaml
+
+# Use custom configuration
+python download_location_data.py ann-arbor --config custom_ann_arbor.yaml
 ```
 
 ### Manual Pipeline Execution (Advanced)
@@ -296,6 +290,12 @@ ERROR: You must accept the license agreement
 - Increase timeout with `--timeout` option
 - Try again later when CDS load is lower
 
+Example:
+```bash
+cd ..
+python download_location_data.py ann-arbor --timeout 7200
+```
+
 ### Missing Dependencies
 ```
 ModuleNotFoundError: No module named 'cdsapi'
@@ -309,28 +309,37 @@ pip install -r ../ecmwf/requirements.txt
 ```
 ERROR: Data not available for requested date
 ```
-**Solution**: ERA5 data has a 5-day delay. Modify the date in `ann_arbor.yaml` to a date at least 5 days in the past.
+**Solution**: ERA5 data has a 5-day delay. Generate a new configuration with a different date:
+```bash
+cd ..
+python generate_config.py ann-arbor --start-date 2025-10-01 --output ann_arbor.yaml
+```
 
 ## Advanced Configuration
 
-### Customize Domain
-Edit `ann_arbor.yaml` to change:
-- Domain size: Modify `bounds` (x1max, x2max, x3max)
-- Resolution: Modify `cells` (nx1, nx2, nx3)
-- Center location: Modify `center_latitude`, `center_longitude`
-- Time period: Modify `start-date`, `end-date`
+Use the configuration generator to customize:
+```bash
+cd ..
+# Customize domain size
+python generate_config.py ann-arbor --x2-extent 150000 --x3-extent 150000
 
-### Multiple Days
-To simulate multiple days, change the date range in `ann_arbor.yaml`:
-```yaml
-integration:
-  start-date: 2025-11-01
-  end-date: 2025-11-03  # Now covers 3 days
+# Change resolution
+python generate_config.py ann-arbor --nx1 200 --nx2 300 --nx3 300
+
+# Multiple days
+python generate_config.py ann-arbor --start-date 2025-11-01 --end-date 2025-11-03
+```
+
+For all options, see:
+```bash
+cd ..
+python generate_config.py --help
 ```
 
 ## Documentation
 
-For detailed documentation on the ECMWF data pipeline, see:
+For detailed documentation, see:
+- `../README_UNIFIED_SYSTEM.md` - Complete unified system guide
 - `../ecmwf/README_ECMWF.md` - Complete ECMWF API documentation
 - `../ecmwf/STEP1_README.md` - Data fetching details
 - `../ecmwf/STEP2_README.md` - Density calculation
