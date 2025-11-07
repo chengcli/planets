@@ -1,10 +1,10 @@
 # White Sands Weather Prediction Pipeline
 
-This directory contains the weather data curation and processing pipeline for the White Sands Missile Range test area in New Mexico.
+This directory contains the configuration for the White Sands Missile Range test area in New Mexico.
 
 ## Overview
 
-The White Sands weather prediction pipeline downloads and processes ERA5 reanalysis data from ECMWF for atmospheric modeling and simulation. The pipeline covers:
+The White Sands location uses the unified Earth location system to download and process ERA5 reanalysis data from ECMWF for atmospheric modeling and simulation. The pipeline covers:
 
 - **Test Area**: Longitude 106.7°W - 106.2°W, Latitude 32.6°N - 33.6°N
 - **With Buffer**: Longitude 107.2°W - 105.7°W, Latitude 32.1°N - 34.1°N (0.5° buffer on each side)
@@ -38,15 +38,16 @@ The White Sands weather prediction pipeline downloads and processes ERA5 reanaly
    pip install -r ../ecmwf/requirements.txt
    ```
 
-### Automated Pipeline (Recommended)
+### Download and Process Data
 
-Run the complete automated pipeline that executes all 4 steps:
+Run the unified pipeline from the earth directory:
 
 ```bash
-python download_white_sands_data.py
+cd ..
+python download_location_data.py white-sands
 ```
 
-This will automatically:
+This will automatically execute all 4 steps:
 1. Download ERA5 data (Step 1)
 2. Calculate air density (Step 2)
 3. Regrid to Cartesian coordinates (Step 3)
@@ -62,24 +63,32 @@ Advanced options:
 
 ```bash
 # Run only first 2 steps
-python download_white_sands_data.py --stop-after 2
+python download_location_data.py white-sands --stop-after 2
 
 # Use custom timeout (2 hours per step)
-python download_white_sands_data.py --timeout 7200
+python download_location_data.py white-sands --timeout 7200
 
 # Download to specific directory
-python download_white_sands_data.py --output-base ./data
+python download_location_data.py white-sands --output-base ./data
+```
+
+### Generate Custom Configuration
+
+To create a custom configuration file with different parameters:
+
+```bash
+cd ..
+python generate_config.py white-sands --start-date 2025-10-15 --end-date 2025-10-20 --output custom_white_sands.yaml
+python download_location_data.py white-sands --config custom_white_sands.yaml
 ```
 
 ## Pipeline Steps
 
-The data curation pipeline consists of 4 steps that are now automated:
+The data curation pipeline consists of 4 steps:
 
 ### Step 1: Fetch ERA5 Data
 
 Downloads ERA5 reanalysis data from ECMWF Climate Data Store.
-
-**Automated**: Yes (via `download_white_sands_data.py`)
 
 **Manual option**:
 ```bash
@@ -98,8 +107,6 @@ python ../ecmwf/fetch_era5_pipeline.py white_sands.yaml
 
 Computes total air density from dynamics and density variables.
 
-**Automated**: Yes (via `download_white_sands_data.py`)
-
 **Manual option**:
 ```bash
 python ../ecmwf/calculate_density.py \
@@ -116,8 +123,6 @@ python ../ecmwf/calculate_density.py \
 
 Transforms pressure-level data to height-based Cartesian grid suitable for finite-volume methods.
 
-**Automated**: Yes (via `download_white_sands_data.py`)
-
 **Manual option**:
 ```bash
 python ../ecmwf/regrid_era5_to_cartesian.py \
@@ -131,8 +136,6 @@ python ../ecmwf/regrid_era5_to_cartesian.py \
 ### Step 4: Compute Hydrostatic Pressure
 
 Ensures hydrostatic balance in the regridded data.
-
-**Automated**: Yes (via `download_white_sands_data.py`)
 
 **Manual option**:
 ```bash
@@ -152,11 +155,13 @@ The `white_sands.yaml` file defines:
 - **Time**: October 1-2, 2025
 - **Grid**: High-resolution atmospheric grid for mesoscale modeling
 
-Edit this file to customize:
-- Domain size and resolution
-- Time period
-- Geographic center
-- Grid cell counts
+To generate a custom configuration:
+```bash
+cd ..
+python generate_config.py white-sands [options]
+```
+
+See `../README_UNIFIED_SYSTEM.md` for all options.
 
 ## Output Data Structure
 
@@ -199,29 +204,37 @@ After running the complete pipeline, you will have:
 
 ## Usage Examples
 
-### Automated Pipeline (Recommended)
+### Run Complete Pipeline
 ```bash
+cd ..
 # Run complete pipeline with all 4 steps
-python download_white_sands_data.py
+python download_location_data.py white-sands
 ```
 
 ### Partial Pipeline Execution
 ```bash
+cd ..
 # Run only Step 1 (download data)
-python download_white_sands_data.py --stop-after 1
+python download_location_data.py white-sands --stop-after 1
 
 # Run Steps 1-2 (download and calculate density)
-python download_white_sands_data.py --stop-after 2
+python download_location_data.py white-sands --stop-after 2
 
 # Run with custom timeout (2 hours per step)
-python download_white_sands_data.py --timeout 7200
+python download_location_data.py white-sands --timeout 7200
 ```
 
-### Custom Output Directory
+### Custom Configuration
 ```bash
-python download_white_sands_data.py \
-    --config white_sands.yaml \
-    --output-base ./october_2025_data
+cd ..
+# Generate custom configuration
+python generate_config.py white-sands \
+    --start-date 2025-10-15 \
+    --end-date 2025-10-20 \
+    --output custom_white_sands.yaml
+
+# Use custom configuration
+python download_location_data.py white-sands --config custom_white_sands.yaml
 ```
 
 ### Manual Pipeline Execution (Advanced)
@@ -245,25 +258,6 @@ python ../ecmwf/regrid_era5_to_cartesian.py \
 # Step 4: Compute pressure
 python ../ecmwf/compute_hydrostatic_pressure.py \
     white_sands.yaml ./data/32.10N_34.10N_107.20W_105.70W/regridded_white_sands.nc
-```
-
-### Process Existing Data
-If you already have downloaded ERA5 files:
-
-```bash
-# Skip fetching, run only processing steps
-cd /path/to/existing/data
-
-python ../ecmwf/calculate_density.py \
-    --input-dir . \
-    --output-dir .
-
-python ../ecmwf/regrid_era5_to_cartesian.py \
-    ../white_sands/white_sands.yaml . \
-    --output regridded.nc
-
-python ../ecmwf/compute_hydrostatic_pressure.py \
-    ../white_sands/white_sands.yaml regridded.nc
 ```
 
 ## Monitoring Downloads
@@ -307,16 +301,29 @@ pip install -r ../ecmwf/requirements.txt
 
 ## Advanced Configuration
 
-### Customize Domain
-Edit `white_sands.yaml` to change:
-- Domain size: Modify `bounds` (x1max, x2max, x3max)
-- Resolution: Modify `cells` (nx1, nx2, nx3)
-- Center location: Modify `center_latitude`, `center_longitude`
-- Time period: Modify `start-date`, `end-date`
+Use the configuration generator to customize:
+```bash
+cd ..
+# Customize domain size
+python generate_config.py white-sands --x2-extent 250000 --x3-extent 150000
+
+# Change resolution
+python generate_config.py white-sands --nx1 200 --nx2 500 --nx3 400
+
+# Multiple days
+python generate_config.py white-sands --start-date 2025-10-01 --end-date 2025-10-07
+```
+
+For all options, see:
+```bash
+cd ..
+python generate_config.py --help
+```
 
 ## Documentation
 
-For detailed documentation on the ECMWF data pipeline, see:
+For detailed documentation, see:
+- `../README_UNIFIED_SYSTEM.md` - Complete unified system guide
 - `../ecmwf/README_ECMWF.md` - Complete ECMWF API documentation
 - `../ecmwf/STEP1_README.md` - Data fetching details
 - `../ecmwf/STEP2_README.md` - Density calculation
