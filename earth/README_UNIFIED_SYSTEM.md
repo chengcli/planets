@@ -6,7 +6,7 @@ This directory contains a unified system for managing atmospheric simulation con
 
 The unified system consists of:
 
-1. **Location Table** (`locations.yaml`): Defines geographic locations with polygon bounds, center coordinates, and default settings
+1. **Location Table** (`locations.csv`): Tab-delimited file defining location identifiers, names, and polygon bounds
 2. **Configuration Template** (`config_template.yaml`): Template YAML file with placeholders for location-specific values
 3. **Configuration Generator** (`generate_config.py`): Generates location-specific YAML files from the template
 4. **Unified Download Script** (`download_location_data.py`): Single script that works with any configured location
@@ -19,19 +19,28 @@ The unified system consists of:
 python generate_config.py --list
 ```
 
-This shows all configured locations with their geographic bounds, default settings, and descriptions.
+This shows all configured locations with their geographic bounds and calculated center points.
 
 ### Generate a Configuration File
 
+All parameters are required (no defaults):
+
 ```bash
-# Generate config for Ann Arbor with defaults
-python generate_config.py ann-arbor
+# Generate config for Ann Arbor
+python generate_config.py ann-arbor \
+    --start-date 2025-11-01 --end-date 2025-11-02 \
+    --nx1 150 --nx2 200 --nx3 200 \
+    --x1-max 15000 --x2-extent 125000 --x3-extent 125000 \
+    --tlim 86400 \
+    --output ann_arbor.yaml
 
-# Generate config for White Sands with custom time window
-python generate_config.py white-sands --start-date 2025-10-15 --end-date 2025-10-16
-
-# Generate config with custom grid resolution
-python generate_config.py ann-arbor --nx2 300 --nx3 300 --output custom_config.yaml
+# Generate config for White Sands
+python generate_config.py white-sands \
+    --start-date 2025-10-01 --end-date 2025-10-02 \
+    --nx1 150 --nx2 400 --nx3 300 \
+    --x1-max 15000 --x2-extent 222640 --x3-extent 139800 \
+    --tlim 172800 \
+    --output white_sands.yaml
 ```
 
 ### Download and Process Data
@@ -52,75 +61,51 @@ python download_location_data.py white-sands --stop-after 2
 
 ## Location Table Format
 
-The `locations.yaml` file defines available locations:
+The `locations.csv` file is a tab-delimited file with minimal information:
 
-```yaml
-locations:
-  location-id:  # Unique identifier (letters, numbers, dashes, underscores)
-    name: "Human-readable name"
-    description: "Location description"
-    
-    # Geographic bounds (polygon vertices)
-    polygon:
-      - [lon1, lat1]  # Southwest corner
-      - [lon2, lat2]  # Northwest corner
-      - [lon3, lat3]  # Northeast corner
-      - [lon4, lat4]  # Southeast corner
-    
-    # Domain center
-    center:
-      longitude: -83.7  # Negative for West
-      latitude: 42.3    # Positive for North
-    
-    elevation: 280  # Meters above sea level
-    
-    # Default domain size (meters)
-    default_domain:
-      x2_extent: 125000.0  # North-south
-      x3_extent: 125000.0  # East-west
-      x1_max: 15000.0      # Vertical
-    
-    # Default grid resolution
-    default_grid:
-      nx1: 150  # Vertical cells
-      nx2: 200  # North-south cells
-      nx3: 200  # East-west cells
-      nghost: 3 # Ghost cells per side
-    
-    # Default time settings
-    default_time:
-      start_date: "2025-11-01"
-      end_date: "2025-11-01"
-      tlim: 43200  # Seconds
 ```
+location_id	name	polygon_vertices
+ann-arbor	Ann Arbor Michigan	-84.25,41.75;-84.25,42.85;-83.15,42.85;-83.15,41.75
+white-sands	White Sands New Mexico	-107.2,32.1;-107.2,34.1;-105.7,34.1;-105.7,32.1
+```
+
+Fields:
+- **location_id**: Unique identifier (letters, numbers, dashes, underscores only)
+- **name**: Human-readable name
+- **polygon_vertices**: Semicolon-separated list of lon,lat coordinate pairs defining geographic bounds
+
+Notes:
+- Center point is calculated automatically from polygon vertices
+- Simulated rectangular domain must contain the polygon bounds
+- Polygon vertices should be in counterclockwise order
 
 ## Configuration Generator Options
 
-The `generate_config.py` script accepts the following options:
+The `generate_config.py` script requires all parameters to be explicitly specified:
 
 ### Basic Options
 - `location_id`: Required location identifier (e.g., `ann-arbor`)
 - `--list`: List all available locations
 - `--output PATH`: Output file path (default: `<location-id>.yaml`)
 
-### Time Options
+### Time Options (REQUIRED)
 - `--start-date YYYY-MM-DD`: Simulation start date
 - `--end-date YYYY-MM-DD`: Simulation end date
 - `--tlim SECONDS`: Simulation time limit
 
-### Grid Resolution Options
+### Grid Resolution Options (REQUIRED)
 - `--nx1 INT`: Vertical cells
 - `--nx2 INT`: North-south cells
 - `--nx3 INT`: East-west cells
 - `--nghost INT`: Ghost cells per side (default: 3)
 
-### Domain Size Options
+### Domain Size Options (REQUIRED)
 - `--x1-max METERS`: Vertical extent
 - `--x2-extent METERS`: North-south extent
 - `--x3-extent METERS`: East-west extent
 
 ### File Paths
-- `--locations-file PATH`: Custom locations table (default: `locations.yaml`)
+- `--locations-file PATH`: Custom locations table (default: `locations.csv`)
 - `--template-file PATH`: Custom template file (default: `config_template.yaml`)
 
 ## Download Script Options
@@ -138,47 +123,25 @@ The `download_location_data.py` script accepts:
 
 To add a new location:
 
-1. Edit `locations.yaml` and add a new entry under `locations:`
-2. Define the polygon bounds (vertices in counterclockwise order)
-3. Set center coordinates, elevation, and default parameters
-4. Generate a config file: `python generate_config.py <new-location-id>`
-5. Download data: `python download_location_data.py <new-location-id>`
+1. Edit `locations.csv` and add a new tab-delimited line
+2. Define the polygon bounds (vertices in counterclockwise order as lon,lat pairs separated by semicolons)
+3. Generate a config file with all required parameters
+4. Download data: `python download_location_data.py <new-location-id>`
 
 ### Example: Adding a New Location
 
-```yaml
-locations:
-  my-location:
-    name: "My Test Site"
-    description: "Description of the test site"
-    
-    polygon:
-      - [-100.0, 30.0]  # SW corner
-      - [-100.0, 31.0]  # NW corner
-      - [-99.0, 31.0]   # NE corner
-      - [-99.0, 30.0]   # SE corner
-    
-    center:
-      longitude: -99.5
-      latitude: 30.5
-    
-    elevation: 500
-    
-    default_domain:
-      x2_extent: 111000.0
-      x3_extent: 111000.0
-      x1_max: 15000.0
-    
-    default_grid:
-      nx1: 150
-      nx2: 200
-      nx3: 200
-      nghost: 3
-    
-    default_time:
-      start_date: "2025-01-01"
-      end_date: "2025-01-01"
-      tlim: 43200
+Add to `locations.csv`:
+```
+my-location	My Test Site	-100.0,30.0;-100.0,31.0;-99.0,31.0;-99.0,30.0
+```
+
+Then generate config:
+```bash
+python generate_config.py my-location \
+    --start-date 2025-01-01 --end-date 2025-01-02 \
+    --nx1 150 --nx2 200 --nx3 200 \
+    --x1-max 15000 --x2-extent 111000 --x3-extent 111000 \
+    --tlim 86400
 ```
 
 ## Location Identifier Rules
