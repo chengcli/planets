@@ -184,7 +184,16 @@ The default `us_zipcode.csv` includes sample data for major US cities:
 
 ## Integration with Other Scripts
 
-The zipcode data can be used with other scripts in this directory:
-- `generate_config.py` can read and process zipcode polygons
-- The format is compatible with the existing location database system
-- Zipcodes can be used as location identifiers in configuration files
+The zipcode data format is designed to be compatible with the location database system:
+
+**Format Comparison:**
+- `locations.csv`: `location_id`, `name`, `polygon_vertices`
+- `us_states.csv`: `location_id`, `name`, `polygon_vertices`
+- `us_zipcode.csv`: `zipcode`, `polygon_vertices` (simplified - zipcode is self-descriptive)
+
+**Note:** While the zipcode CSV uses a simplified format (without a separate name column), the polygon format is identical to other location databases. The zipcode visualization scripts (`plot_us_zipcode.py` and `plot_us_zipcode_simple.py`) handle this format directly.
+
+**For custom integrations:** If you need to integrate zipcode data with `generate_config.py` or similar tools that expect a `name` field, you can either:
+1. Use the zipcode visualization scripts provided (recommended)
+2. Create a custom loader that adds the zipcode as both the ID and name
+3. Extend the CSV to include a name column (e.g., "Zipcode 48104")

@@ -122,7 +122,15 @@ def plot_zipcodes_simple(zipcode_file, zipcodes_to_plot, output_file=None,
         all_lats.extend([p[1] for p in polygon])
     
     # Plot each zipcode polygon
-    colors = plt.cm.Set3.colors  # Use a colorful palette
+    # Use a more robust color generation for many zipcodes
+    import matplotlib.cm as cm
+    if len(zipcodes) <= 12:
+        # Use Set3 colormap for small number of zipcodes (up to 12 distinct colors)
+        colors = plt.cm.Set3.colors
+    else:
+        # Use tab20 colormap for more zipcodes (up to 20 distinct colors)
+        colors = plt.cm.tab20.colors
+    
     for i, (zipcode, polygon) in enumerate(zipcodes.items()):
         # Convert polygon to matplotlib path
         vertices = [(lon, lat) for lon, lat in polygon]
