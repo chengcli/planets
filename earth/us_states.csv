@@ -1,11 +1,11 @@
 # US States Location Table
 # Format: location_id	name	polygon_vertices
 # polygon_vertices format: lon1,lat1;lon2,lat2;lon3,lat3;...
-# Vertices represent actual state boundaries (simplified to ~30-50 points)
+# Vertices represent actual state boundaries (simplified to 13-50 vertices per state)
 # Vertices are in counterclockwise order
 # Longitude: negative for West, positive for East
 # Latitude: negative for South, positive for North
-# Note: Alaska uses extended western longitude (<-180°) for consistency
+# Note: Alaska uses extended western longitude (around -189° to -130°) for consistency
 #       across the International Date Line. Scripts calculate rectangular
 #       bounds from these polygons automatically.
 location_id	name	polygon_vertices
