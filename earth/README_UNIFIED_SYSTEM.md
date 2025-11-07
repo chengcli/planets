@@ -93,7 +93,7 @@ A pre-configured location database for all US states is available in `us_states.
 - District of Columbia
 - Puerto Rico
 
-Each state is defined by its bounding box (4 corner coordinates). You can use these as starting points for state-level simulations:
+Each state is defined by its actual boundary polygon (typically 13-50 vertices representing the true state shape). The scripts automatically calculate rectangular simulation bounds from these polygons. You can use these for state-level simulations:
 
 ```bash
 # List all US states

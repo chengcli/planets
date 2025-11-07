@@ -1,6 +1,6 @@
 # Earth Location Table
 # Format: location_id	name	polygon_vertices
-# polygon_vertices format: lon1,lat1;lon2,lat2;lon3,lat3;lon4,lat4
+# polygon_vertices format: lon1,lat1;lon2,lat2;lon3,lat3;...
 # Vertices should be in counterclockwise order
 # Longitude: negative for West, positive for East
 # Latitude: negative for South, positive for North
