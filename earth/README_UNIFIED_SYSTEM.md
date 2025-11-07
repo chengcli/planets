@@ -86,6 +86,27 @@ Notes:
 - Simulated rectangular domain encompasses the polygon bounds
 - Polygon vertices should be in counterclockwise order
 
+### US States Database
+
+A pre-configured location database for all US states is available in `us_states.csv`. This file contains 52 entries:
+- 50 US states
+- District of Columbia
+- Puerto Rico
+
+Each state is defined by its bounding box (4 corner coordinates). You can use these as starting points for state-level simulations:
+
+```bash
+# List all US states
+python generate_config.py --locations-file us_states.csv --list
+
+# Generate config for California
+python generate_config.py california \
+    --locations-file us_states.csv \
+    --start-date 2025-01-01 --end-date 2025-01-02 \
+    --nx1 150 --nx2 300 --nx3 300 \
+    --x1-max 15000 --tlim 86400
+```
+
 ## Configuration Generator Options
 
 The `generate_config.py` script requires most parameters to be explicitly specified:
