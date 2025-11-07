@@ -23,24 +23,30 @@ This shows all configured locations with their geographic bounds and calculated 
 
 ### Generate a Configuration File
 
-All parameters are required (no defaults):
+Required parameters (horizontal extents calculated automatically from polygon):
 
 ```bash
-# Generate config for Ann Arbor
+# Generate config for Ann Arbor (x2/x3 extents calculated from polygon)
 python generate_config.py ann-arbor \
     --start-date 2025-11-01 --end-date 2025-11-02 \
     --nx1 150 --nx2 200 --nx3 200 \
-    --x1-max 15000 --x2-extent 125000 --x3-extent 125000 \
-    --tlim 86400 \
+    --x1-max 15000 --tlim 86400 \
     --output ann_arbor.yaml
 
-# Generate config for White Sands
+# Generate config for White Sands (x2/x3 extents calculated from polygon)
 python generate_config.py white-sands \
     --start-date 2025-10-01 --end-date 2025-10-02 \
     --nx1 150 --nx2 400 --nx3 300 \
-    --x1-max 15000 --x2-extent 222640 --x3-extent 139800 \
-    --tlim 172800 \
+    --x1-max 15000 --tlim 172800 \
     --output white_sands.yaml
+
+# Optional: Override calculated extents if needed
+python generate_config.py ann-arbor \
+    --start-date 2025-11-01 --end-date 2025-11-02 \
+    --nx1 150 --nx2 200 --nx3 200 \
+    --x1-max 15000 --tlim 86400 \
+    --x2-extent 130000 --x3-extent 95000 \
+    --output custom_ann_arbor.yaml
 ```
 
 ### Download and Process Data
@@ -76,12 +82,13 @@ Fields:
 
 Notes:
 - Center point is calculated automatically from polygon vertices
-- Simulated rectangular domain must contain the polygon bounds
+- Horizontal domain extents (x2, x3) are calculated automatically from polygon bounds
+- Simulated rectangular domain encompasses the polygon bounds
 - Polygon vertices should be in counterclockwise order
 
 ## Configuration Generator Options
 
-The `generate_config.py` script requires all parameters to be explicitly specified:
+The `generate_config.py` script requires most parameters to be explicitly specified:
 
 ### Basic Options
 - `location_id`: Required location identifier (e.g., `ann-arbor`)
@@ -99,10 +106,12 @@ The `generate_config.py` script requires all parameters to be explicitly specifi
 - `--nx3 INT`: East-west cells
 - `--nghost INT`: Ghost cells per side (default: 3)
 
-### Domain Size Options (REQUIRED)
-- `--x1-max METERS`: Vertical extent
-- `--x2-extent METERS`: North-south extent
-- `--x3-extent METERS`: East-west extent
+### Domain Size Options
+- `--x1-max METERS`: Vertical extent (REQUIRED)
+- `--x2-extent METERS`: North-south extent (OPTIONAL - calculated from polygon if not specified)
+- `--x3-extent METERS`: East-west extent (OPTIONAL - calculated from polygon if not specified)
+
+**Note**: Horizontal extents (x2, x3) are automatically calculated from the polygon bounds using standard Earth radius approximations (1° latitude ≈ 111 km, 1° longitude ≈ 111 km × cos(latitude)). You can override these by explicitly providing values.
 
 ### File Paths
 - `--locations-file PATH`: Custom locations table (default: `locations.csv`)
@@ -135,13 +144,12 @@ Add to `locations.csv`:
 my-location	My Test Site	-100.0,30.0;-100.0,31.0;-99.0,31.0;-99.0,30.0
 ```
 
-Then generate config:
+Then generate config (extents calculated automatically):
 ```bash
 python generate_config.py my-location \
     --start-date 2025-01-01 --end-date 2025-01-02 \
     --nx1 150 --nx2 200 --nx3 200 \
-    --x1-max 15000 --x2-extent 111000 --x3-extent 111000 \
-    --tlim 86400
+    --x1-max 15000 --tlim 86400
 ```
 
 ## Location Identifier Rules
