@@ -73,7 +73,7 @@ python plot_us_cities.py
 # Plot specific cities by location ID
 python plot_us_cities.py --cities pasadena-ca austin-tx boston-ma
 
-# Plot all cities in specific states
+# Plot all cities in specific states (use state abbreviations)
 python plot_us_cities.py --states CA TX NY
 
 # Use different projection

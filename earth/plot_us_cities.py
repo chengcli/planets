@@ -15,8 +15,8 @@ Usage:
     # Plot specific cities
     python plot_us_cities.py --cities pasadena-ca austin-tx boston-ma
 
-    # Plot all cities in specific states
-    python plot_us_cities.py --states California Texas
+    # Plot all cities in specific states (use state abbreviations)
+    python plot_us_cities.py --states CA TX
 
     # Use different projection
     python plot_us_cities.py --projection LambertConformal --cities seattle-wa
@@ -191,12 +191,13 @@ def plot_cities(locations_file, cities_to_plot=None, states_filter=None,
     gl.right_labels = False
     
     # Add title
-    if len(locations) <= 5:
-        title = f"City Boundaries: {', '.join([locations[c]['name'] for c in list(locations.keys())[:5]])}"
-        if len(locations) > 5:
-            title += f" (+{len(locations) - 5} more)"
+    if len(locations) <= 3:
+        title = f"City Boundaries: {', '.join([locations[c]['name'] for c in list(locations.keys())])}"
     else:
-        title = f"US City Boundaries ({len(locations)} cities)"
+        city_names = [locations[c]['name'] for c in list(locations.keys())[:3]]
+        title = f"City Boundaries: {', '.join(city_names)} (+{len(locations) - 3} more)"
+        if len(locations) > 10:
+            title = f"US City Boundaries ({len(locations)} cities)"
     
     plt.title(title, fontsize=14, fontweight='bold', pad=20)
     

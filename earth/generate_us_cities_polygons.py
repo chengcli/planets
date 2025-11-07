@@ -61,7 +61,7 @@ STATE_ABBREVIATIONS = {
 }
 
 
-# Major cities per state (top 3-5 by population)
+# Major cities per state (typically 3-5 largest cities, more for populous states)
 MAJOR_CITIES = {
     'Alabama': ['Birmingham', 'Montgomery', 'Mobile', 'Huntsville'],
     'Alaska': ['Anchorage', 'Fairbanks', 'Juneau'],
@@ -127,7 +127,14 @@ def location_id_from_city_state(city, state_abbr):
     Format: cityname-stateabbr (e.g., 'pasadena-ca')
     """
     # Remove special characters and convert to lowercase
-    city_clean = city.lower().replace(' ', '-').replace("'", '')
+    import re
+    city_clean = city.lower()
+    # Replace spaces, apostrophes, and other punctuation with hyphens
+    city_clean = re.sub(r"['\s.,()\[\]]+", '-', city_clean)
+    # Remove any remaining non-alphanumeric characters except hyphens
+    city_clean = re.sub(r'[^a-z0-9-]', '', city_clean)
+    # Remove leading/trailing hyphens and collapse multiple hyphens
+    city_clean = re.sub(r'-+', '-', city_clean).strip('-')
     state_clean = state_abbr.lower()
     return f"{city_clean}-{state_clean}"
 
