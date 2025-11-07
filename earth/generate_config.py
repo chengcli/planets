@@ -34,15 +34,48 @@ Examples:
 import argparse
 import sys
 import re
+import csv
 from pathlib import Path
 import yaml
 
 
 def load_locations(locations_file):
-    """Load location definitions from YAML file."""
+    """Load location definitions from CSV file."""
+    locations = {}
     with open(locations_file, 'r') as f:
-        data = yaml.safe_load(f)
-    return data['locations']
+        # Skip comment lines
+        lines = [line for line in f if not line.strip().startswith('#')]
+        
+    # Parse CSV from non-comment lines (tab-delimited)
+    import io
+    csv_data = io.StringIO(''.join(lines))
+    reader = csv.DictReader(csv_data, delimiter='\t', skipinitialspace=True)
+    
+    for row in reader:
+        # Parse polygon vertices
+        vertices_str = row['polygon_vertices']
+        coords = vertices_str.split(';')
+        polygon = []
+        for coord in coords:
+            lon, lat = coord.split(',')
+            polygon.append([float(lon), float(lat)])
+        
+        locations[row['location_id']] = {
+            'name': row['name'],
+            'polygon': polygon
+        }
+    
+    return locations
+
+
+def calculate_center(polygon):
+    """Calculate the center point from polygon vertices."""
+    lons = [p[0] for p in polygon]
+    lats = [p[1] for p in polygon]
+    return {
+        'longitude': sum(lons) / len(lons),
+        'latitude': sum(lats) / len(lats)
+    }
 
 
 def load_template(template_file):
@@ -97,34 +130,57 @@ def generate_config(location_id, locations, template, args):
     
     location = locations[location_id]
     
-    # Get values from location defaults or command-line overrides
-    start_date = args.start_date or location['default_time']['start_date']
-    end_date = args.end_date or location['default_time']['end_date']
+    # Check required arguments
+    if not args.start_date:
+        raise ValueError("--start-date is required")
+    if not args.end_date:
+        raise ValueError("--end-date is required")
+    if not args.nx1:
+        raise ValueError("--nx1 (vertical cells) is required")
+    if not args.nx2:
+        raise ValueError("--nx2 (north-south cells) is required")
+    if not args.nx3:
+        raise ValueError("--nx3 (east-west cells) is required")
+    
+    start_date = args.start_date
+    end_date = args.end_date
     
     # Validate dates
     validate_date_format(start_date)
     validate_date_format(end_date)
     
-    # Grid resolution (command-line overrides defaults)
-    nx1 = args.nx1 or location['default_grid']['nx1']
-    nx2 = args.nx2 or location['default_grid']['nx2']
-    nx3 = args.nx3 or location['default_grid']['nx3']
-    nghost = args.nghost or location['default_grid']['nghost']
+    # Grid resolution (all required)
+    nx1 = args.nx1
+    nx2 = args.nx2
+    nx3 = args.nx3
+    nghost = args.nghost if args.nghost is not None else 3  # Default nghost to 3
     
-    # Domain size (command-line overrides defaults)
-    x1_max = args.x1_max or location['default_domain']['x1_max']
-    x2_extent = args.x2_extent or location['default_domain']['x2_extent']
-    x3_extent = args.x3_extent or location['default_domain']['x3_extent']
+    # Domain size (required)
+    if not args.x1_max:
+        raise ValueError("--x1-max (vertical extent in meters) is required")
+    if not args.x2_extent:
+        raise ValueError("--x2-extent (north-south extent in meters) is required")
+    if not args.x3_extent:
+        raise ValueError("--x3-extent (east-west extent in meters) is required")
     
-    # Time limit (command-line overrides defaults)
-    tlim = args.tlim or location['default_time']['tlim']
+    x1_max = args.x1_max
+    x2_extent = args.x2_extent
+    x3_extent = args.x3_extent
+    
+    # Time limit (required)
+    if not args.tlim:
+        raise ValueError("--tlim (simulation time in seconds) is required")
+    tlim = args.tlim
+    
+    # Calculate center from polygon
+    center = calculate_center(location['polygon'])
     
     # Build replacement dictionary
     replacements = {
         'location_name': location['name'],
-        'location_description': location['description'],
-        'center_latitude': location['center']['latitude'],
-        'center_longitude': location['center']['longitude'],
+        'location_description': f"Location: {location['name']}",
+        'center_latitude': center['latitude'],
+        'center_longitude': center['longitude'],
         'x1_max': x1_max,
         'x2_extent': x2_extent,
         'x3_extent': x3_extent,
@@ -157,11 +213,12 @@ def list_locations(locations):
     for loc_id, loc_data in sorted(locations.items()):
         print(f"\n{loc_id}")
         print(f"  Name: {loc_data['name']}")
-        print(f"  Description: {loc_data['description']}")
-        print(f"  Center: {loc_data['center']['latitude']}°N, "
-              f"{abs(loc_data['center']['longitude'])}°"
-              f"{'W' if loc_data['center']['longitude'] < 0 else 'E'}")
-        print(f"  Elevation: {loc_data['elevation']} m")
+        
+        # Calculate and show center
+        center = calculate_center(loc_data['polygon'])
+        print(f"  Center: {center['latitude']:.2f}°N, "
+              f"{abs(center['longitude']):.2f}°"
+              f"{'W' if center['longitude'] < 0 else 'E'}")
         
         # Show polygon bounds
         polygon = loc_data['polygon']
@@ -169,15 +226,6 @@ def list_locations(locations):
         lats = [p[1] for p in polygon]
         print(f"  Bounds: {min(lats)}°N to {max(lats)}°N, "
               f"{abs(max(lons))}°W to {abs(min(lons))}°W")
-        
-        # Show default settings
-        dd = loc_data['default_domain']
-        dg = loc_data['default_grid']
-        dt = loc_data['default_time']
-        print(f"  Default domain: {dd['x2_extent']/1000:.1f} km × "
-              f"{dd['x3_extent']/1000:.1f} km × {dd['x1_max']/1000:.1f} km")
-        print(f"  Default grid: {dg['nx1']} × {dg['nx2']} × {dg['nx3']} cells")
-        print(f"  Default time: {dt['start_date']} to {dt['end_date']}")
     
     print("\n" + "=" * 70)
 
@@ -203,60 +251,61 @@ def main():
     
     parser.add_argument(
         '--start-date',
-        help="Start date for simulation (YYYY-MM-DD format)"
+        help="Start date for simulation (YYYY-MM-DD format) [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--end-date',
-        help="End date for simulation (YYYY-MM-DD format)"
+        help="End date for simulation (YYYY-MM-DD format) [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--nx1',
         type=int,
-        help="Number of interior cells in vertical direction"
+        help="Number of interior cells in vertical direction [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--nx2',
         type=int,
-        help="Number of interior cells in north-south direction"
+        help="Number of interior cells in north-south direction [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--nx3',
         type=int,
-        help="Number of interior cells in east-west direction"
+        help="Number of interior cells in east-west direction [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--nghost',
         type=int,
+        default=3,
         help="Number of ghost cells on each side (default: 3)"
     )
     
     parser.add_argument(
         '--x1-max',
         type=float,
-        help="Vertical extent in meters (default from location)"
+        help="Vertical extent in meters [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--x2-extent',
         type=float,
-        help="North-south extent in meters (default from location)"
+        help="North-south extent in meters [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--x3-extent',
         type=float,
-        help="East-west extent in meters (default from location)"
+        help="East-west extent in meters [REQUIRED unless --list]"
     )
     
     parser.add_argument(
         '--tlim',
         type=int,
-        help="Simulation time limit in seconds"
+        help="Simulation time limit in seconds [REQUIRED unless --list]"
     )
     
     parser.add_argument(
@@ -266,8 +315,8 @@ def main():
     
     parser.add_argument(
         '--locations-file',
-        default='locations.yaml',
-        help="Path to locations table file (default: locations.yaml)"
+        default='locations.csv',
+        help="Path to locations table file (default: locations.csv)"
     )
     
     parser.add_argument(
@@ -345,11 +394,8 @@ def main():
         output_file.write_text(config)
         print(f"✓ Configuration file generated: {output_file}")
         print(f"  Location: {locations[location_id]['name']}")
-        print(f"  Time window: {args.start_date or locations[location_id]['default_time']['start_date']} "
-              f"to {args.end_date or locations[location_id]['default_time']['end_date']}")
-        print(f"  Grid: {args.nx1 or locations[location_id]['default_grid']['nx1']} × "
-              f"{args.nx2 or locations[location_id]['default_grid']['nx2']} × "
-              f"{args.nx3 or locations[location_id]['default_grid']['nx3']} cells")
+        print(f"  Time window: {args.start_date} to {args.end_date}")
+        print(f"  Grid: {args.nx1} × {args.nx2} × {args.nx3} cells")
     except Exception as e:
         print(f"ERROR: Failed to write output file: {e}")
         return 1

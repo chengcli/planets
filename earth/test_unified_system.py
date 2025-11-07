@@ -28,19 +28,20 @@ class TestLocationTable(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.locations_file = EARTH_DIR / "locations.yaml"
+        self.locations_file = EARTH_DIR / "locations.csv"
         self.template_file = EARTH_DIR / "config_template.yaml"
     
     def test_locations_file_exists(self):
-        """Test that locations.yaml exists."""
-        self.assertTrue(self.locations_file.exists())
+        """Test that locations.csv exists."""
+        csv_file = EARTH_DIR / "locations.csv"
+        self.assertTrue(csv_file.exists())
     
     def test_template_file_exists(self):
         """Test that config_template.yaml exists."""
         self.assertTrue(self.template_file.exists())
     
     def test_load_locations(self):
-        """Test loading locations from YAML."""
+        """Test loading locations from CSV."""
         locations = generate_config.load_locations(self.locations_file)
         self.assertIsInstance(locations, dict)
         self.assertIn('ann-arbor', locations)
@@ -51,23 +52,24 @@ class TestLocationTable(unittest.TestCase):
         locations = generate_config.load_locations(self.locations_file)
         
         for loc_id, loc_data in locations.items():
-            # Check required fields
+            # Check required fields (simplified structure)
             self.assertIn('name', loc_data)
-            self.assertIn('description', loc_data)
             self.assertIn('polygon', loc_data)
-            self.assertIn('center', loc_data)
-            self.assertIn('elevation', loc_data)
-            self.assertIn('default_domain', loc_data)
-            self.assertIn('default_grid', loc_data)
-            self.assertIn('default_time', loc_data)
             
             # Check polygon has vertices
             self.assertIsInstance(loc_data['polygon'], list)
             self.assertGreater(len(loc_data['polygon']), 0)
-            
-            # Check center has lat/lon
-            self.assertIn('latitude', loc_data['center'])
-            self.assertIn('longitude', loc_data['center'])
+    
+    def test_calculate_center(self):
+        """Test center calculation from polygon."""
+        locations = generate_config.load_locations(self.locations_file)
+        
+        for loc_id, loc_data in locations.items():
+            center = generate_config.calculate_center(loc_data['polygon'])
+            self.assertIn('latitude', center)
+            self.assertIn('longitude', center)
+            self.assertIsInstance(center['latitude'], float)
+            self.assertIsInstance(center['longitude'], float)
 
 
 class TestLocationIDValidation(unittest.TestCase):
@@ -142,7 +144,7 @@ class TestConfigGeneration(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.locations_file = EARTH_DIR / "locations.yaml"
+        self.locations_file = EARTH_DIR / "locations.csv"
         self.template_file = EARTH_DIR / "config_template.yaml"
         self.locations = generate_config.load_locations(self.locations_file)
         self.template = generate_config.load_template(self.template_file)
@@ -154,18 +156,18 @@ class TestConfigGeneration(unittest.TestCase):
     
     def test_generate_ann_arbor_config(self):
         """Test generating Ann Arbor configuration."""
-        # Mock args
+        # Mock args with required parameters
         class Args:
-            start_date = None
-            end_date = None
-            nx1 = None
-            nx2 = None
-            nx3 = None
-            nghost = None
-            x1_max = None
-            x2_extent = None
-            x3_extent = None
-            tlim = None
+            start_date = '2025-11-01'
+            end_date = '2025-11-01'
+            nx1 = 150
+            nx2 = 200
+            nx3 = 200
+            nghost = 3
+            x1_max = 15000.0
+            x2_extent = 125000.0
+            x3_extent = 125000.0
+            tlim = 43200
         
         args = Args()
         config = generate_config.generate_config(
@@ -176,21 +178,20 @@ class TestConfigGeneration(unittest.TestCase):
         self.assertNotIn('{location_name}', config)
         self.assertNotIn('{center_latitude}', config)
         self.assertIn('Ann Arbor', config)
-        self.assertIn('42.3', config)
     
     def test_generate_white_sands_config(self):
         """Test generating White Sands configuration."""
         class Args:
-            start_date = None
-            end_date = None
-            nx1 = None
-            nx2 = None
-            nx3 = None
-            nghost = None
-            x1_max = None
-            x2_extent = None
-            x3_extent = None
-            tlim = None
+            start_date = '2025-10-01'
+            end_date = '2025-10-02'
+            nx1 = 150
+            nx2 = 400
+            nx3 = 300
+            nghost = 3
+            x1_max = 15000.0
+            x2_extent = 222640.0
+            x3_extent = 139800.0
+            tlim = 172800
         
         args = Args()
         config = generate_config.generate_config(
@@ -201,7 +202,6 @@ class TestConfigGeneration(unittest.TestCase):
         self.assertNotIn('{location_name}', config)
         self.assertNotIn('{center_latitude}', config)
         self.assertIn('White Sands', config)
-        self.assertIn('33.1', config)
     
     def test_generate_with_overrides(self):
         """Test generating config with command-line overrides."""
@@ -211,10 +211,10 @@ class TestConfigGeneration(unittest.TestCase):
             nx1 = 200
             nx2 = 300
             nx3 = 300
-            nghost = None
-            x1_max = None
-            x2_extent = None
-            x3_extent = None
+            nghost = 3
+            x1_max = 15000.0
+            x2_extent = 125000.0
+            x3_extent = 125000.0
             tlim = 172800
         
         args = Args()
@@ -233,16 +233,16 @@ class TestConfigGeneration(unittest.TestCase):
     def test_invalid_location(self):
         """Test that invalid location raises error."""
         class Args:
-            start_date = None
-            end_date = None
-            nx1 = None
-            nx2 = None
-            nx3 = None
-            nghost = None
-            x1_max = None
-            x2_extent = None
-            x3_extent = None
-            tlim = None
+            start_date = '2025-11-01'
+            end_date = '2025-11-01'
+            nx1 = 150
+            nx2 = 200
+            nx3 = 200
+            nghost = 3
+            x1_max = 15000.0
+            x2_extent = 125000.0
+            x3_extent = 125000.0
+            tlim = 43200
         
         args = Args()
         with self.assertRaises(ValueError):

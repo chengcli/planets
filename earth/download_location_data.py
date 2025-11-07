@@ -47,6 +47,7 @@ import subprocess
 import time
 import glob
 from pathlib import Path
+import csv
 import yaml
 
 # Add parent directory to path for importing ECMWF modules
@@ -56,10 +57,32 @@ sys.path.insert(0, str(ECMWF_DIR))
 
 
 def load_locations(locations_file):
-    """Load location definitions from YAML file."""
+    """Load location definitions from CSV file."""
+    locations = {}
     with open(locations_file, 'r') as f:
-        data = yaml.safe_load(f)
-    return data['locations']
+        # Skip comment lines
+        lines = [line for line in f if not line.strip().startswith('#')]
+        
+    # Parse CSV from non-comment lines (tab-delimited)
+    import io
+    csv_data = io.StringIO(''.join(lines))
+    reader = csv.DictReader(csv_data, delimiter='\t', skipinitialspace=True)
+    
+    for row in reader:
+        # Parse polygon vertices
+        vertices_str = row['polygon_vertices']
+        coords = vertices_str.split(';')
+        polygon = []
+        for coord in coords:
+            lon, lat = coord.split(',')
+            polygon.append([float(lon), float(lat)])
+        
+        locations[row['location_id']] = {
+            'name': row['name'],
+            'polygon': polygon
+        }
+    
+    return locations
 
 
 def check_cds_credentials():
@@ -271,8 +294,8 @@ def main():
     
     parser.add_argument(
         '--locations-file',
-        default='locations.yaml',
-        help="Path to locations table file (default: locations.yaml)"
+        default='locations.csv',
+        help="Path to locations table file (default: locations.csv)"
     )
     
     args = parser.parse_args()
