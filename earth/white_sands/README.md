@@ -2,6 +2,25 @@
 
 This directory contains the weather data curation and processing pipeline for the White Sands Missile Range test area in New Mexico.
 
+> **✨ NEW: Unified Location System Available!**
+> 
+> A new unified system has been implemented that reduces code duplication and makes it easier to work with multiple locations. The new system provides:
+> - Single download script for all locations
+> - Easy configuration generation with command-line overrides
+> - Simple process for adding new locations
+> - Backward compatibility with existing scripts
+> 
+> **Quick Start with New System:**
+> ```bash
+> # From the earth directory
+> cd ..
+> python download_location_data.py white-sands
+> ```
+> 
+> See [`../README_UNIFIED_SYSTEM.md`](../README_UNIFIED_SYSTEM.md) for complete documentation.
+> 
+> **Legacy scripts in this directory still work** but the unified approach is recommended for new workflows.
+
 ## Overview
 
 The White Sands weather prediction pipeline downloads and processes ERA5 reanalysis data from ECMWF for atmospheric modeling and simulation. The pipeline covers:
