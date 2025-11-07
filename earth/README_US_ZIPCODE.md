@@ -1,45 +1,90 @@
-# US Zipcode Polygon Tools
+# US Zipcode Polygon Query Tools
 
-This directory contains tools for generating and visualizing US zipcode boundary polygons.
+This directory contains tools for querying and visualizing US zipcode boundary polygons from the [State-zip-code-GeoJSON](https://github.com/chengcli/State-zip-code-GeoJSON) repository.
+
+## Overview
+
+Rather than maintaining a static database, these tools query zipcode polygon data on-demand from the State-zip-code-GeoJSON repository, which contains GeoJSON files with zipcode boundaries for all 50 US states plus DC.
 
 ## Scripts
 
-### generate_us_zipcode_polygons.py
+### query_zipcode.py
 
-Generate or regenerate the `us_zipcode.csv` file with zipcode boundary polygons.
+Query zipcode polygon boundaries from the State-zip-code-GeoJSON database.
 
 **Usage:**
 ```bash
-# Generate with default settings (uses sample data for major cities)
-python generate_us_zipcode_polygons.py
+# Query a single zipcode
+python query_zipcode.py 48104
 
-# Generate specific zipcodes only
-python generate_us_zipcode_polygons.py --zipcodes 48104 90210 10001
+# Query multiple zipcodes
+python query_zipcode.py 48104 90210 10001
 
-# Customize output file and vertex count
-python generate_us_zipcode_polygons.py --output custom_zipcode.csv --max-vertices 20
+# Provide state hint for faster lookup
+python query_zipcode.py 48104 --state mi
 
-# Generate sample of random zipcodes (for testing)
-python generate_us_zipcode_polygons.py --sample 100
+# Simplify polygon to fewer vertices
+python query_zipcode.py 48104 --max-vertices 50
+
+# Output in different formats
+python query_zipcode.py 48104 --format json
+python query_zipcode.py 48104 --format wkt
+```
+
+**As a Python library:**
+```python
+from query_zipcode import get_zipcode_polygon
+
+# Get polygon for Ann Arbor, MI
+polygon = get_zipcode_polygon('48104', state_hint='mi')
+if polygon:
+    print(f"Found {len(polygon)} vertices")
+    for lon, lat in polygon[:3]:
+        print(f"  ({lon}, {lat})")
 ```
 
 **Options:**
-- `--output FILE`: Output CSV file path (default: `us_zipcode.csv`)
-- `--max-vertices N`: Maximum vertices per polygon (default: 30)
-- `--zipcodes ZIP [ZIP ...]`: Specific zipcodes to include
-- `--sample N`: Sample N random zipcodes for testing
+- `--state STATE`: 2-letter state abbreviation to narrow search
+- `--max-vertices N`: Maximum vertices per polygon (simplifies if needed)
+- `--format {json,csv,wkt}`: Output format (default: csv)
 
-**Data Source:**
-Currently uses sample data for major US cities. For complete data, you can:
-1. Download US Census TIGER/Line shapefiles
-2. Use a geocoding API
-3. Manually download GeoJSON from public repositories
+### plot_us_zipcode_simple.py
 
-**Note:** The script uses ZCTA (ZIP Code Tabulation Areas) which are generalized areal representations and may not exactly match postal ZIP code boundaries.
+Plot zipcode polygons using simple matplotlib (no cartopy dependency).
+
+**Requirements:**
+```bash
+pip install matplotlib
+```
+
+**Usage:**
+```bash
+# Plot a single zipcode
+python plot_us_zipcode_simple.py 48104
+
+# Plot multiple zipcodes
+python plot_us_zipcode_simple.py 48104 90210 10001
+
+# Provide state hint for faster querying
+python plot_us_zipcode_simple.py 48104 --state mi
+
+# Simplify polygons for faster rendering
+python plot_us_zipcode_simple.py 48104 --max-vertices 100
+
+# Save to file
+python plot_us_zipcode_simple.py 48104 --output ann_arbor.png
+```
+
+**Options:**
+- `--state STATE`: 2-letter state abbreviation to speed up queries
+- `--max-vertices N`: Maximum vertices per polygon (simplifies if needed)
+- `--output FILE`: Save figure to file instead of displaying
+- `--no-labels`: Don't show zipcode labels
+- `--figsize WIDTH HEIGHT`: Figure size in inches (default: 12 10)
 
 ### plot_us_zipcode.py
 
-Plot zipcode polygons on a map with coastal lines using various map projections (requires cartopy).
+Plot zipcode polygons on a map with coastal lines using cartopy (requires internet for map data).
 
 **Requirements:**
 ```bash
@@ -59,16 +104,17 @@ python plot_us_zipcode.py 48104 90210 10001
 # Use different projection
 python plot_us_zipcode.py 48104 --projection LambertConformal
 
-# Save to file instead of displaying
+# Save to file
 python plot_us_zipcode.py 48104 --output ann_arbor.png
 
-# Plot without zipcode labels
-python plot_us_zipcode.py 48104 90210 --no-labels
+# Provide state hint and simplify
+python plot_us_zipcode.py 48104 --state mi --max-vertices 100
 ```
 
 **Options:**
-- `--zipcode-file FILE`: Path to CSV file with zipcode polygons (default: `us_zipcode.csv`)
-- `--projection NAME`: Map projection to use (default: `PlateCarree`)
+- `--state STATE`: 2-letter state abbreviation to speed up queries
+- `--projection NAME`: Map projection to use (default: PlateCarree)
+- `--max-vertices N`: Maximum vertices per polygon (simplifies if needed)
 - `--output FILE`: Save figure to file instead of displaying
 - `--no-labels`: Don't show zipcode labels
 - `--figsize WIDTH HEIGHT`: Figure size in inches (default: 12 10)
@@ -81,119 +127,96 @@ python plot_us_zipcode.py 48104 90210 --no-labels
 - `Robinson`: Robinson projection
 - `AlbersEqualArea`: Albers equal-area conic
 
-### plot_us_zipcode_simple.py
-
-Plot zipcode polygons using simple matplotlib without map projections (no internet required).
-
-**Requirements:**
-```bash
-pip install matplotlib
-```
-
-**Usage:**
-```bash
-# Plot a single zipcode
-python plot_us_zipcode_simple.py 48104
-
-# Plot multiple zipcodes
-python plot_us_zipcode_simple.py 48104 90210 10001
-
-# Save to file
-python plot_us_zipcode_simple.py 48104 --output ann_arbor.png
-```
-
-**Options:**
-- `--zipcode-file FILE`: Path to CSV file with zipcode polygons (default: `us_zipcode.csv`)
-- `--output FILE`: Save figure to file instead of displaying
-- `--no-labels`: Don't show zipcode labels
-- `--figsize WIDTH HEIGHT`: Figure size in inches (default: 12 10)
-
 ## Examples
 
-### Generate zipcode data for specific zipcodes
+### Query zipcode data
 ```bash
-python generate_us_zipcode_polygons.py --zipcodes 48104 90210 10001 02101 60601
+# Get Ann Arbor, MI zipcode polygon
+python query_zipcode.py 48104 --state mi
+
+# Get multiple California zipcodes
+python query_zipcode.py 90210 94102 --state ca --format json
+
+# Get simplified polygon (fewer vertices)
+python query_zipcode.py 48104 --max-vertices 50
 ```
 
-### Plot Ann Arbor zipcode on a Lambert Conformal projection (requires cartopy)
+### Plot single zipcode (simple)
 ```bash
-python plot_us_zipcode.py 48104 --projection LambertConformal --output ann_arbor.png
+python plot_us_zipcode_simple.py 48104 --state mi --output ann_arbor.png
 ```
 
-### Plot multiple zipcodes (simple version, no cartopy needed)
+### Plot multiple zipcodes (simple)
 ```bash
 python plot_us_zipcode_simple.py 48104 90210 10001 --output three_zipcodes.png
 ```
 
-### Plot Beverly Hills and save high-res image
+### Plot with cartopy and projection
 ```bash
-python plot_us_zipcode_simple.py 90210 --output beverly_hills.png
+python plot_us_zipcode.py 48104 --state mi --projection LambertConformal --output ann_arbor_map.png
 ```
 
-### Compare East and West coast cities
+### Compare multiple zipcodes on map
 ```bash
-python plot_us_zipcode_simple.py 10001 90210 33101 94102 --output coast_cities.png
+python plot_us_zipcode.py 48104 90210 33101 --projection AlbersEqualArea --output coast_comparison.png
 ```
 
-## File Format
+## How It Works
 
-The generated `us_zipcode.csv` file follows this format:
+The tools query the [State-zip-code-GeoJSON](https://github.com/chengcli/State-zip-code-GeoJSON) repository, which contains GeoJSON files for each US state with ZCTA (ZIP Code Tabulation Area) boundaries.
 
+**Lookup Strategy:**
+1. If a state hint is provided, search that state first
+2. Infer likely states based on ZIP code prefix (first digit)
+3. If not found, search all states (slower but comprehensive)
+
+**Performance Tips:**
+- Always provide `--state` hint when known for faster queries
+- Use `--max-vertices` to simplify complex polygons for faster rendering
+- The first query to a state downloads the GeoJSON file (~1-10MB per state)
+
+## Data Source
+
+**Repository:** https://github.com/chengcli/State-zip-code-GeoJSON
+
+The repository contains GeoJSON files with zipcode boundaries derived from US Census TIGER/Line shapefiles. Each state's file includes:
+- ZCTA5CE10: 5-digit ZIP code
+- Polygon/MultiPolygon geometry with actual boundaries
+
+**Note:** ZCTAs (ZIP Code Tabulation Areas) are generalized areal representations and may not exactly match postal ZIP code boundaries.
+
+## State Abbreviations
+
+Use 2-letter state abbreviations for the `--state` parameter:
+
+- `al` - Alabama, `ak` - Alaska, `az` - Arizona, `ar` - Arkansas
+- `ca` - California, `co` - Colorado, `ct` - Connecticut, `de` - Delaware
+- `fl` - Florida, `ga` - Georgia, `hi` - Hawaii, `id` - Idaho
+- `il` - Illinois, `in` - Indiana, `ia` - Iowa, `ks` - Kansas
+- `ky` - Kentucky, `la` - Louisiana, `me` - Maine, `md` - Maryland
+- `ma` - Massachusetts, `mi` - Michigan, `mn` - Minnesota, `ms` - Mississippi
+- `mo` - Missouri, `mt` - Montana, `ne` - Nebraska, `nv` - Nevada
+- `nh` - New Hampshire, `nj` - New Jersey, `nm` - New Mexico, `ny` - New York
+- `nc` - North Carolina, `nd` - North Dakota, `oh` - Ohio, `ok` - Oklahoma
+- `or` - Oregon, `pa` - Pennsylvania, `ri` - Rhode Island, `sc` - South Carolina
+- `sd` - South Dakota, `tn` - Tennessee, `tx` - Texas, `ut` - Utah
+- `vt` - Vermont, `va` - Virginia, `wa` - Washington, `wv` - West Virginia
+- `wi` - Wisconsin, `wy` - Wyoming, `dc` - District of Columbia
+
+## Integration
+
+The `get_zipcode_polygon()` function can be imported and used in other scripts:
+
+```python
+from query_zipcode import get_zipcode_polygon
+
+# Query a zipcode
+polygon = get_zipcode_polygon('48104', state_hint='mi', max_vertices=100)
+
+if polygon:
+    # polygon is a list of (longitude, latitude) tuples
+    for lon, lat in polygon:
+        print(f"Vertex: ({lon:.6f}, {lat:.6f})")
 ```
-zipcode	polygon_vertices
-48104	-83.78,42.25;-83.78,42.31;-83.70,42.31;-83.70,42.25;-83.78,42.25
-```
 
-Where:
-- **zipcode**: 5-digit ZIP code (zero-padded)
-- **polygon_vertices**: Semicolon-separated lon,lat pairs representing the zipcode boundary
-
-## Available Zipcodes
-
-The default `us_zipcode.csv` includes sample data for major US cities:
-
-- `48104` - Ann Arbor, MI
-- `90210` - Beverly Hills, CA
-- `10001` - New York, NY
-- `60601` - Chicago, IL
-- `02101` - Boston, MA
-- `33101` - Miami, FL
-- `94102` - San Francisco, CA
-- `98101` - Seattle, WA
-- `75201` - Dallas, TX
-- `30301` - Atlanta, GA
-- `80201` - Denver, CO
-- `85001` - Phoenix, AZ
-- `19101` - Philadelphia, PA
-- `77001` - Houston, TX
-- `20001` - Washington, DC
-- `32801` - Orlando, FL
-- `89101` - Las Vegas, NV
-- `97201` - Portland, OR
-- `55401` - Minneapolis, MN
-- `63101` - St. Louis, MO
-
-## Notes
-
-- Zipcode boundaries are based on ZCTA (ZIP Code Tabulation Areas) from the US Census Bureau
-- ZCTAs are generalized areal representations and may not exactly match postal ZIP code boundaries
-- All longitude/latitude values follow standard conventions:
-  - Longitude: negative for West, positive for East
-  - Latitude: negative for South, positive for North
-- For complete zipcode coverage, download the full TIGER/Line shapefiles from the US Census Bureau
-
-## Integration with Other Scripts
-
-The zipcode data format is designed to be compatible with the location database system:
-
-**Format Comparison:**
-- `locations.csv`: `location_id`, `name`, `polygon_vertices`
-- `us_states.csv`: `location_id`, `name`, `polygon_vertices`
-- `us_zipcode.csv`: `zipcode`, `polygon_vertices` (simplified - zipcode is self-descriptive)
-
-**Note:** While the zipcode CSV uses a simplified format (without a separate name column), the polygon format is identical to other location databases. The zipcode visualization scripts (`plot_us_zipcode.py` and `plot_us_zipcode_simple.py`) handle this format directly.
-
-**For custom integrations:** If you need to integrate zipcode data with `generate_config.py` or similar tools that expect a `name` field, you can either:
-1. Use the zipcode visualization scripts provided (recommended)
-2. Create a custom loader that adds the zipcode as both the ID and name
-3. Extend the CSV to include a name column (e.g., "Zipcode 48104")
+The function returns `None` if the zipcode is not found.

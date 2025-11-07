@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Plot US zipcode polygons using simple matplotlib (no internet required).
+Plot US zipcode polygons using simple matplotlib.
 
-This script reads the us_zipcode.csv file and plots zipcode boundaries
-using simple matplotlib without map projections. This is useful when
-you don't have cartopy installed or internet access.
+This script queries the State-zip-code-GeoJSON database and plots zipcode
+boundaries using simple matplotlib without map projections.
 
 Requirements:
     pip install matplotlib
@@ -18,11 +17,18 @@ Usage:
 
     # Save to file instead of displaying
     python plot_us_zipcode_simple.py 48104 --output ann_arbor_zipcode.png
+    
+    # Provide state hint for faster querying
+    python plot_us_zipcode_simple.py 48104 --state mi --output ann_arbor.png
 """
 
 import argparse
 import sys
 from pathlib import Path
+
+# Add earth directory to path
+EARTH_DIR = Path(__file__).parent
+sys.path.insert(0, str(EARTH_DIR))
 
 try:
     import matplotlib.pyplot as plt
@@ -34,82 +40,47 @@ except ImportError:
     print("  pip install matplotlib")
     sys.exit(1)
 
-
-def load_zipcodes(zipcode_file):
-    """
-    Load zipcode polygons from CSV file.
-    
-    Args:
-        zipcode_file: Path to CSV file with zipcode polygons
-        
-    Returns:
-        dict: Dictionary mapping zipcode to polygon coordinates
-    """
-    zipcodes = {}
-    
-    with open(zipcode_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            
-            # Skip comments and header
-            if line.startswith('#') or line.startswith('zipcode'):
-                continue
-            
-            if not line:
-                continue
-            
-            # Parse line
-            parts = line.split('\t')
-            if len(parts) != 2:
-                continue
-            
-            zipcode = parts[0]
-            vertices_str = parts[1]
-            
-            # Parse vertices
-            polygon = []
-            for vertex in vertices_str.split(';'):
-                if ',' in vertex:
-                    lon, lat = vertex.split(',')
-                    polygon.append((float(lon), float(lat)))
-            
-            zipcodes[zipcode] = polygon
-    
-    return zipcodes
+# Import the query function
+try:
+    from query_zipcode import get_zipcode_polygon
+except ImportError:
+    print("Error: query_zipcode module not found.")
+    print("Make sure query_zipcode.py is in the same directory.")
+    sys.exit(1)
 
 
-def plot_zipcodes_simple(zipcode_file, zipcodes_to_plot, output_file=None, 
-                        show_labels=True, figsize=(12, 10)):
+def plot_zipcodes_simple(zipcodes_to_plot, state_hint=None, output_file=None, 
+                        show_labels=True, figsize=(12, 10), max_vertices=None):
     """
     Plot zipcode polygons using simple matplotlib.
     
     Args:
-        zipcode_file: Path to CSV file with zipcode polygons
         zipcodes_to_plot: List of zipcodes to plot
+        state_hint: Optional state abbreviation to speed up queries
         output_file: Path to save figure (None = display)
         show_labels: Whether to show zipcode labels
         figsize: Figure size as (width, height) tuple
+        max_vertices: Maximum vertices per polygon (simplifies if needed)
     """
     
-    # Load zipcodes
-    print(f"Loading zipcodes from {zipcode_file}...")
-    all_zipcodes = load_zipcodes(zipcode_file)
-    
-    # Filter to requested zipcodes
+    # Query zipcodes from database
+    print(f"Querying {len(zipcodes_to_plot)} zipcodes from State-zip-code-GeoJSON database...")
     zipcodes = {}
     for z in zipcodes_to_plot:
         z = str(z).zfill(5)
-        if z in all_zipcodes:
-            zipcodes[z] = all_zipcodes[z]
+        print(f"  Querying {z}...", end=' ')
+        polygon = get_zipcode_polygon(z, state_hint, max_vertices)
+        if polygon:
+            zipcodes[z] = polygon
+            print(f"✓ ({len(polygon)} vertices)")
         else:
-            print(f"Warning: Zipcode {z} not found in {zipcode_file}")
+            print(f"✗ not found")
     
     if not zipcodes:
-        print(f"Error: None of the specified zipcodes found in {zipcode_file}")
-        print(f"Available zipcodes: {', '.join(sorted(all_zipcodes.keys()))}")
+        print(f"Error: None of the specified zipcodes found in database")
         sys.exit(1)
     
-    print(f"Plotting {len(zipcodes)} zipcodes...")
+    print(f"\nPlotting {len(zipcodes)} zipcodes...")
     
     # Create figure and axis
     fig, ax = plt.subplots(figsize=figsize)
@@ -196,9 +167,6 @@ def plot_zipcodes_simple(zipcode_file, zipcodes_to_plot, output_file=None,
 
 def main():
     """Main entry point."""
-    # Add earth directory to path
-    EARTH_DIR = Path(__file__).parent
-    
     parser = argparse.ArgumentParser(
         description="Plot US zipcode polygons using simple matplotlib",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -212,9 +180,14 @@ def main():
     )
     
     parser.add_argument(
-        '--zipcode-file',
-        default='us_zipcode.csv',
-        help="Path to CSV file with zipcode polygons (default: us_zipcode.csv)"
+        '--state',
+        help="2-letter state abbreviation to speed up queries (e.g., mi, ca, ny)"
+    )
+    
+    parser.add_argument(
+        '--max-vertices',
+        type=int,
+        help="Maximum vertices per polygon (simplifies if needed)"
     )
     
     parser.add_argument(
@@ -238,21 +211,13 @@ def main():
     
     args = parser.parse_args()
     
-    # Resolve zipcode file path
-    zipcode_file = Path(args.zipcode_file)
-    if not zipcode_file.is_absolute():
-        zipcode_file = EARTH_DIR / zipcode_file
-    
-    if not zipcode_file.exists():
-        print(f"Error: Zipcode file not found: {zipcode_file}")
-        sys.exit(1)
-    
     plot_zipcodes_simple(
-        zipcode_file=zipcode_file,
         zipcodes_to_plot=args.zipcodes,
+        state_hint=args.state,
         output_file=args.output,
         show_labels=not args.no_labels,
-        figsize=tuple(args.figsize)
+        figsize=tuple(args.figsize),
+        max_vertices=args.max_vertices
     )
 
 
