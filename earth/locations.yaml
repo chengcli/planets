@@ -1,0 +1,103 @@
+# Earth Location Table
+# 
+# This file defines geographic locations for atmospheric modeling.
+# Each location has:
+#   - id: Unique identifier (letters, numbers, dashes, underscores only)
+#   - name: Human-readable name
+#   - polygon: List of [longitude, latitude] vertices defining the geographic bounds
+#   - center: [longitude, latitude] for domain center
+#   - elevation: Approximate elevation in meters
+#   - description: Location description
+#
+# Notes:
+# - Simulated rectangular domain must contain the polygon bounds
+# - Polygon vertices should be in counterclockwise order
+# - Longitude: negative for West, positive for East
+# - Latitude: negative for South, positive for North
+
+locations:
+  ann-arbor:
+    name: "Ann Arbor, Michigan"
+    description: "University of Michigan campus area in southeastern Michigan"
+    
+    # Polygon defining the geographic bounds (counterclockwise)
+    # Approximately 125 km × 125 km area around Ann Arbor
+    polygon:
+      - [-84.25, 41.75]  # Southwest corner
+      - [-84.25, 42.85]  # Northwest corner
+      - [-83.15, 42.85]  # Northeast corner
+      - [-83.15, 41.75]  # Southeast corner
+    
+    # Center coordinates
+    center:
+      longitude: -83.7
+      latitude: 42.3
+    
+    # Approximate elevation (meters above sea level)
+    elevation: 280
+    
+    # Climate notes
+    climate: "Humid continental with lake influences from Great Lakes"
+    
+    # Default domain size (meters)
+    default_domain:
+      x2_extent: 125000.0  # North-south extent (meters)
+      x3_extent: 125000.0  # East-west extent (meters)
+      x1_max: 15000.0      # Vertical extent (meters)
+    
+    # Default grid resolution (interior cells)
+    default_grid:
+      nx1: 150  # Vertical
+      nx2: 200  # North-south
+      nx3: 200  # East-west
+      nghost: 3
+    
+    # Default time settings
+    default_time:
+      start_date: "2025-11-01"
+      end_date: "2025-11-01"
+      tlim: 43200  # 12 hours in seconds
+  
+  white-sands:
+    name: "White Sands, New Mexico"
+    description: "White Sands Missile Range test area in south-central New Mexico"
+    
+    # Polygon defining the geographic bounds
+    # Test area: 106.7W - 106.2W, 32.6N - 33.6N
+    # With 0.5 degree buffer: 107.2W - 105.7W, 32.1N - 34.1N
+    polygon:
+      - [-107.2, 32.1]  # Southwest corner
+      - [-107.2, 34.1]  # Northwest corner
+      - [-105.7, 34.1]  # Northeast corner
+      - [-105.7, 32.1]  # Southeast corner
+    
+    # Center coordinates (center of buffered area)
+    center:
+      longitude: -106.45
+      latitude: 33.1
+    
+    # Approximate elevation (meters above sea level)
+    elevation: 1250
+    
+    # Climate notes
+    climate: "Chihuahuan Desert, arid with minimal precipitation"
+    
+    # Default domain size (meters)
+    # ~223 km N-S × ~140 km E-W
+    default_domain:
+      x2_extent: 222640.0  # North-south extent (meters)
+      x3_extent: 139800.0  # East-west extent (meters)
+      x1_max: 15000.0      # Vertical extent (meters)
+    
+    # Default grid resolution (interior cells)
+    default_grid:
+      nx1: 150  # Vertical
+      nx2: 400  # North-south
+      nx3: 300  # East-west
+      nghost: 3
+    
+    # Default time settings
+    default_time:
+      start_date: "2025-10-01"
+      end_date: "2025-10-02"
+      tlim: 172800  # 2 days in seconds
