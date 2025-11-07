@@ -9,7 +9,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 style.use('dark_background')
 
 # initial profile
-case = 'case-7/k2-18b.out2.00174'
+case = 'case-10/k2-18b.out2.00188'
 data = Dataset(f'{case}.nc', 'r')
 
 pres_axis = mean(data['press'][0,:,:,0], axis=1) / 1.e5
@@ -31,7 +31,7 @@ x1v = data['x1'][:] / 1.e3
 x2v = data['x2'][:] / 1.e3
 
 fig, axs = subplots(1, 2, 
-                    figsize = (12, 8),
+                    figsize = (8, 6),
                     sharey = True,
                     gridspec_kw = {'width_ratios': [8,1]})
 subplots_adjust(hspace = 0.10, wspace = 0.10)
@@ -43,32 +43,33 @@ dlnp = (log(pres_axis[0]) - log(pres_axis[-1])) / (len(pres_axis) - 1)
 X, Y = meshgrid(x2v, pres_axis)
 
 # cloud map
-clevels = logspace(-3, 2, 8)
+print('H2Oc min/max:', np.nanmin(H2Oc), np.nanmax(H2Oc))
+#clevels = logspace(0, 3, 7)
 
 # precipitation map
-iH2Op = H2Op > 1.E-5
-xH2Op = (X.T)[iH2Op]
-yH2Op = (Y.T)[iH2Op]
+#iH2Op = H2Op > 1.E-5
+#xH2Op = (X.T)[iH2Op]
+#yH2Op = (Y.T)[iH2Op]
 
 # randomize the position of precipitation in the cell
-xH2Op += dx*(rand(len(xH2Op)) - 0.5)
-yH2Op *= exp(dlnp*(rand(len(yH2Op)) - 0.5))
+#xH2Op += dx*(rand(len(xH2Op)) - 0.5)
+#yH2Op *= exp(dlnp*(rand(len(yH2Op)) - 0.5))
 
 # water mixing ratio
 wlevel = arange(0., 52.50, 2.5)
 ax = axs[0]
 h2 = ax.contourf(X, Y, vel1,
-                 20,
+                 np.linspace(-50., 50., 11),
                  cmap = 'inferno', extend = 'both')
-#print('H2Oc min/max:', np.nanmin(H2Oc), np.nanmax(H2Oc))
-ax.contourf(X, Y, H2Oc,
-            clevels = clevels,
+print('H2Oc min/max:', np.nanmin(H2Oc), np.nanmax(H2Oc))
+ax.contourf(X, Y, H2Oc, [10., 20., 40., 80., 160.],
             cmap = 'Greys_r',
-            norm = LogNorm(), alpha = 0.8)
+            norm = LogNorm(), 
+            alpha = 0.8)
 #ax.scatter(xH2Op, yH2Op, marker = 'o', color = 'b', s = H2Op[iH2Op]*10.)
 
 #ax.set_xlim([min(x2v), max(x2v)])
-ax.set_ylim([max(pres_axis), min(pres_axis)])
+ax.set_ylim([max(pres_axis), 0.02])
 ax.set_ylabel('Pressure (bar)', fontsize = 15)
 ax.set_yscale('log')
 ax.set_xlabel('Distance (km)', fontsize = 15)
@@ -87,6 +88,6 @@ divider = make_axes_locatable(axs[0])
 cax = divider.append_axes("right", size = "5%", pad = 0., aspect = 40)
 colorbar(h2, cax = cax)
 
-show()
-#savefig('fig_k2-18b_water.png', bbox_inches = 'tight')
+#show()
+savefig('fig_k2-18b_case10.png', bbox_inches = 'tight')
 close(fig)

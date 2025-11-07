@@ -24,8 +24,8 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 100.e3, x2min: 0., x2max: 400.e3, x3min: 0., x3max: 400.e3}
-  cells: {nx1: 100, nx2: 100, nx3: 1, nghost: 3}
+  bounds: {x1min: 0., x1max: 300.e3, x2min: 0., x2max: 800.e3, x3min: 0., x3max: 400.e3}
+  cells: {nx1: 150, nx2: 200, nx3: 1, nghost: 3}
 
 dynamics:
   equation-of-state:
@@ -34,7 +34,7 @@ dynamics:
     pressure-floor: 1.e-10
     tracer-floor: 1.e-10
     limiter: true
-    max-iter: 10
+    max-iter: 20
     ftol: 1.e-6
 
   vertical-projection:
@@ -81,7 +81,7 @@ sedimentation:
     H2O(l,p): 1000.
 
   const-vsed:
-    H2O(l,p): -10.0
+    H2O(l,p): -50.0
 
 reactions:
   - equation: H2O <=> H2O(l)
@@ -97,7 +97,7 @@ reactions:
     rate-constant: {formula: h2o_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
 
 problem:
-  Ps: 20.e5
-  Ts: 500.
-  Tmin: 200.
+  Ps: 1.e5
+  Ts: 400.
+  Tmin: 100.
   xH2O: 0.1
