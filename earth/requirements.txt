@@ -3,9 +3,6 @@ netCDF4
 numpy
 scipy
 cdsapi>=0.7.7
-
-# Optional dependencies for plotting US states
-# To install all dependencies: pip install -r requirements.txt
-# For basic functionality without plotting: pip install xarray netCDF4 numpy scipy cdsapi
 matplotlib
 cartopy
+pyyaml

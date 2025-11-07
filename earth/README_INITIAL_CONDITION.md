@@ -1,15 +1,15 @@
-# Unified Earth Location Configuration System
+# Initial condition configuration system
 
-This directory contains a unified system for managing atmospheric simulation configurations across multiple Earth locations. The system replaces repetitive location-specific code with a flexible, data-driven approach.
+This directory contains a system for configuring atmospheric initial configurations across multiple Earth locations.
 
 ## Overview
 
-The unified system consists of:
+The initial condition configuration system consists of:
 
 1. **Location Table** (`locations.csv`): Tab-delimited file defining location identifiers, names, and polygon bounds
 2. **Configuration Template** (`config_template.yaml`): Template YAML file with placeholders for location-specific values
 3. **Configuration Generator** (`generate_config.py`): Generates location-specific YAML files from the template
-4. **Unified Download Script** (`download_location_data.py`): Single script that works with any configured location
+4. **Download Script** (`download_initial_data.py`): Single script that works with any configured location
 
 ## Quick Start
 
@@ -30,14 +30,12 @@ Required parameters (horizontal extents calculated automatically from polygon):
 python generate_config.py ann-arbor \
     --start-date 2025-11-01 --end-date 2025-11-02 \
     --nx1 150 --nx2 200 --nx3 200 \
-    --x1-max 15000 --tlim 86400 \
     --output ann_arbor.yaml
 
 # Generate config for White Sands (x2/x3 extents calculated from polygon)
 python generate_config.py white-sands \
     --start-date 2025-10-01 --end-date 2025-10-02 \
     --nx1 150 --nx2 400 --nx3 300 \
-    --x1-max 15000 --tlim 172800 \
     --output white_sands.yaml
 
 # Optional: Override calculated extents if needed
@@ -53,16 +51,16 @@ python generate_config.py ann-arbor \
 
 ```bash
 # Download Ann Arbor data (uses ann-arbor/ann_arbor.yaml)
-python download_location_data.py ann-arbor
+python download_initial_data.py ann-arbor
 
 # Download White Sands data (uses white_sands/white_sands.yaml)
-python download_location_data.py white-sands
+python download_initial_data.py white-sands
 
 # Use custom configuration file
-python download_location_data.py ann-arbor --config my_custom_config.yaml
+python download_initial_data.py ann-arbor --config my_custom_config.yaml
 
 # Run only first 2 steps
-python download_location_data.py white-sands --stop-after 2
+python download_initial_data.py white-sands --stop-after 2
 ```
 
 ## Location Table Format
@@ -103,8 +101,7 @@ python generate_config.py --locations-file us_states.csv --list
 python generate_config.py california \
     --locations-file us_states.csv \
     --start-date 2025-01-01 --end-date 2025-01-02 \
-    --nx1 150 --nx2 300 --nx3 300 \
-    --x1-max 15000 --tlim 86400
+    --nx1 150 --nx2 300 --nx3 300
 ```
 
 ## Configuration Generator Options
@@ -140,7 +137,7 @@ The `generate_config.py` script requires most parameters to be explicitly specif
 
 ## Download Script Options
 
-The `download_location_data.py` script accepts:
+The `download_initial_data.py` script accepts:
 
 - `location_id`: Required location identifier
 - `--config PATH`: Configuration file (default: searches location subdirectory)
@@ -156,7 +153,7 @@ To add a new location:
 1. Edit `locations.csv` and add a new tab-delimited line
 2. Define the polygon bounds (vertices in counterclockwise order as lon,lat pairs separated by semicolons)
 3. Generate a config file with all required parameters
-4. Download data: `python download_location_data.py <new-location-id>`
+4. Download data: `python download_initial_data.py <new-location-id>`
 
 ### Example: Adding a New Location
 
@@ -233,57 +230,11 @@ python generate_config.py white-sands \
 
 ```bash
 # Download with increased timeout (2 hours per step)
-python download_location_data.py ann-arbor --timeout 7200
+python download_initial_data.py ann-arbor --timeout 7200
 
 # Download to specific directory
-python download_location_data.py white-sands --output-base ./my_data
+python download_initial_data.py white-sands --output-base ./my_data
 
 # Run only data download step
-python download_location_data.py ann-arbor --stop-after 1
+python download_initial_data.py ann-arbor --stop-after 1
 ```
-
-## File Organization
-
-```
-earth/
-├── locations.yaml                      # Location table
-├── config_template.yaml                # Configuration template
-├── generate_config.py                  # Config generator script
-├── download_location_data.py           # Unified download script
-├── ann_arbor/
-│   ├── ann_arbor.yaml                 # Ann Arbor config
-│   └── README.md
-├── white_sands/
-│   ├── white_sands.yaml               # White Sands config
-│   └── README.md
-└── ecmwf/                             # ECMWF pipeline scripts
-```
-
-## Benefits of Unified System
-
-1. **Reduced Code Duplication**: Single download script instead of per-location copies
-2. **Easy Location Addition**: Add new locations by editing YAML, no code changes needed
-3. **Flexible Configuration**: Command-line overrides for any parameter
-4. **Consistent Interface**: Same commands work for all locations
-5. **Maintainability**: Updates to pipeline logic happen in one place
-6. **Data-Driven**: Location properties defined in data files, not code
-
-## Requirements
-
-- Python 3.6+
-- PyYAML
-- ECMWF CDS API credentials
-- See `ecmwf/requirements.txt` for complete list
-
-## Support
-
-For issues or questions:
-- Check location-specific README files (`ann_arbor/README.md`, `white_sands/README.md`)
-- See ECMWF pipeline documentation (`ecmwf/README_ECMWF.md`)
-- Open an issue in the planets repository
-
-## References
-
-- ERA5 Reanalysis: https://www.ecmwf.int/en/forecasts/datasets/reanalysis-datasets/era5
-- ECMWF CDS: https://cds.climate.copernicus.eu/
-- Python YAML: https://pyyaml.org/
