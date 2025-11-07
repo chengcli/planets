@@ -5,6 +5,9 @@
 # pt
 *.pt
 
+# png
+*.png
+
 # python cache
 __pycache__/
 

@@ -92,7 +92,7 @@ if __name__ == "__main__":
         dt = block.max_time_step(block_vars)
 
         # make output
-        if count % 100 == 0:
+        if count % 200 == 0:
             print(f"count = {count}, dt = {dt}, time = {current_time}", flush=True)
             u = block_vars["hydro_u"]
             w = block_vars["hydro_w"]
@@ -113,9 +113,10 @@ if __name__ == "__main__":
         # dE/dt = - rho * cv * dTdt
         A = 1.e-5        # K / s
         x1v = coord.buffer("x1v")
-        z0 = 80.e3
+        z0 = 140.e3
         dTdt = torch.zeros_like(x1v, device=device)
-        dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 1000.
+        #dTdt[x1v > z0] = - A * (x1v[x1v > z0] - z0) / 1000.
+        dTdt[x1v > z0] = - A
 
         for stage in range(len(block.intg.stages)):
             block.forward(dt, stage, block_vars)
