@@ -9,7 +9,7 @@ The initial condition configuration system consists of:
 1. **Location Table** (`locations.csv`): Tab-delimited file defining location identifiers, names, and polygon bounds
 2. **Configuration Template** (`config_template.yaml`): Template YAML file with placeholders for location-specific values
 3. **Configuration Generator** (`generate_config.py`): Generates location-specific YAML files from the template
-4. **Download Script** (`download_initial_data.py`): Single script that works with any configured location
+4. **Download Script** (`prepare_initial_condition.py`): Single script that works with any configured location
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ Required parameters (horizontal extents calculated automatically from polygon):
 python generate_config.py ann-arbor \
     --start-date 2025-11-01 --end-date 2025-11-02 \
     --nx1 150 --nx2 200 --nx3 200 \
-    --output ann_arbor.yaml
+    --output ann-arbor.yaml
 
 # Generate config for White Sands (x2/x3 extents calculated from polygon)
 python generate_config.py white-sands \
@@ -50,17 +50,17 @@ python generate_config.py ann-arbor \
 ### Download and Process Data
 
 ```bash
-# Download Ann Arbor data (uses ann-arbor/ann_arbor.yaml)
-python download_initial_data.py ann-arbor
+# Download Ann Arbor data (uses ann-arbor.yaml)
+python prepare_initial_condition.py ann-arbor
 
 # Download White Sands data (uses white_sands/white_sands.yaml)
-python download_initial_data.py white-sands
+python prepare_initial_condition.py white-sands
 
 # Use custom configuration file
-python download_initial_data.py ann-arbor --config my_custom_config.yaml
+python prepare_initial_condition.py ann-arbor --config my_custom_config.yaml
 
 # Run only first 2 steps
-python download_initial_data.py white-sands --stop-after 2
+python prepare_initial_condition.py white-sands --stop-after 2
 ```
 
 ## Location Table Format
@@ -137,7 +137,7 @@ The `generate_config.py` script requires most parameters to be explicitly specif
 
 ## Download Script Options
 
-The `download_initial_data.py` script accepts:
+The `prepare_initial_condition.py` script accepts:
 
 - `location_id`: Required location identifier
 - `--config PATH`: Configuration file (default: searches location subdirectory)
@@ -153,7 +153,7 @@ To add a new location:
 1. Edit `locations.csv` and add a new tab-delimited line
 2. Define the polygon bounds (vertices in counterclockwise order as lon,lat pairs separated by semicolons)
 3. Generate a config file with all required parameters
-4. Download data: `python download_initial_data.py <new-location-id>`
+4. Download data: `python prepare_initial_condition.py <new-location-id>`
 
 ### Example: Adding a New Location
 
@@ -230,11 +230,11 @@ python generate_config.py white-sands \
 
 ```bash
 # Download with increased timeout (2 hours per step)
-python download_initial_data.py ann-arbor --timeout 7200
+python prepare_initial_condition.py ann-arbor --timeout 7200
 
 # Download to specific directory
-python download_initial_data.py white-sands --output-base ./my_data
+python prepare_initial_condition.py white-sands --output-base ./my_data
 
 # Run only data download step
-python download_initial_data.py ann-arbor --stop-after 1
+python prepare_initial_condition.py ann-arbor --stop-after 1
 ```
