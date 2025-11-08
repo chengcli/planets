@@ -12,23 +12,23 @@ Step 3: Regrid to Cartesian coordinates
 Step 4: Compute hydrostatic pressure
 
 Usage:
-    python download_location_data.py <location-id> [options]
+    python prepare_initial_condition.py <location-id> [options]
 
 Examples:
     # Download Ann Arbor data with defaults
-    python download_location_data.py ann-arbor
+    python prepare_initial_condition.py ann-arbor
 
     # Download White Sands data with defaults
-    python download_location_data.py white-sands
+    python prepare_initial_condition.py white-sands
 
     # Use custom configuration file
-    python download_location_data.py ann-arbor --config my_custom_config.yaml
+    python prepare_initial_condition.py ann-arbor --config my_custom_config.yaml
 
     # Run only first 2 steps
-    python download_location_data.py white-sands --stop-after 2
+    python prepare_initial_condition.py white-sands --stop-after 2
 
     # Use custom timeout
-    python download_location_data.py ann-arbor --timeout 7200
+    python prepare_initial_condition.py ann-arbor --timeout 7200
 
 Requirements:
     - ECMWF CDS API credentials configured (~/.cdsapirc or CDSAPI_KEY env var)
@@ -216,13 +216,14 @@ def check_step2_files(output_dir):
     return len(density_files) > 0
 
 
-def check_step3_files(output_dir, location_id):
+def check_step3_files(output_dir, location_id, end_date):
     """Check if Step 3 output file exists."""
-    regridded_file = output_dir / f"regridded_{location_id}.nc"
+    regridded_file = output_dir / f"regridded_{location_id}_{end_date}.nc"
     return regridded_file.exists()
 
 
-def wait_for_files(check_function, output_dir, step_name, timeout_seconds=60, check_interval=5, location_id=None):
+def wait_for_files(check_function, output_dir, step_name, timeout_seconds=60,
+                   check_interval=5, location_id=None, end_date=None):
     """
     Wait for files to appear after a step completes.
     
@@ -242,7 +243,7 @@ def wait_for_files(check_function, output_dir, step_name, timeout_seconds=60, ch
     
     while time.time() - start_time < timeout_seconds:
         if location_id:
-            if check_function(output_dir, location_id):
+            if check_function(output_dir, location_id, end_date):
                 print(f"✓ {step_name} output files found")
                 return True
         else:
@@ -327,12 +328,12 @@ def main():
         # Try location-specific subdirectory first
         config_path = SCRIPT_DIR / location_id / f"{location_id}.yaml"
         if not config_path.exists():
-            # Try earth directory
+            # Try current directory
             config_path = SCRIPT_DIR / f"{location_id}.yaml"
     
     if not config_path.is_absolute():
         config_path = SCRIPT_DIR / config_path
-    
+
     output_base = Path(args.output_base).resolve()
     
     # Check if config file exists
@@ -341,12 +342,24 @@ def main():
         print(f"\nTip: Generate a config file using:")
         print(f"  python generate_config.py {location_id}")
         return 1
+
+    # grab end date string from config
+    with open(config_path, 'r') as f:
+        config_data = yaml.safe_load(f)
+        # check end-date key in config/integration
+        if 'integration' not in config_data:
+            raise KeyError("Missing 'integration' section in config file")
+        if 'end-date' not in config_data['integration']:
+            raise KeyError("Missing 'end-date' key in 'integration' section of config file")
+        # datetime.date YYYY-MM-DD to YYYYMMDD
+        end_date = config_data['integration'].get('end-date').strftime('%Y%m%d')
     
     print("="*70)
     print(f"{location_name} Weather Data Pipeline")
     print("="*70)
     print(f"Location ID: {location_id}")
     print(f"Configuration: {config_path}")
+    print(f"End date: {end_date}")
     print(f"Output base: {output_base}")
     print(f"Timeout per step: {args.timeout} seconds ({args.timeout/60:.1f} minutes)")
     if args.stop_after:
@@ -431,7 +444,7 @@ def main():
     print("="*70)
     
     regrid_script = ECMWF_DIR / "regrid_era5_to_cartesian.py"
-    regridded_output = output_dir / f"regridded_{location_id}.nc"
+    regridded_output = output_dir / f"regridded_{location_id}_{end_date}.nc"
     
     step3_success = run_step_with_timeout(
         "Step 3: Regrid to Cartesian",
@@ -446,7 +459,9 @@ def main():
         return 1
     
     # Wait for Step 3 file
-    if not wait_for_files(check_step3_files, output_dir, "Step 3", timeout_seconds=30, location_id=location_id):
+    if not wait_for_files(check_step3_files, output_dir, "Step 3",
+                          timeout_seconds=30, location_id=location_id,
+                          end_date=end_date):
         print("✗ Step 3 output file not found")
         return 1
     
@@ -485,9 +500,9 @@ def main():
     print(f"  - era5_hourly_dynamics_*.nc (Step 1)")
     print(f"  - era5_hourly_densities_*.nc (Step 1)")
     print(f"  - era5_density_*.nc (Step 2)")
-    print(f"  - regridded_{location_id}.nc (Step 3 & 4)")
+    print(f"  - regridded_{location_id}_{end_date}.nc (Step 3 & 4)")
     print()
-    print(f"The regridded_{location_id}.nc file is ready for {location_name} simulations.")
+    print(f"The regridded_{location_id}_{end_date}.nc file is ready for {location_name} simulations.")
     print()
     
     return 0

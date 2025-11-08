@@ -193,10 +193,7 @@ def generate_config(location_id, locations, template, args):
     nx3 = args.nx3
     nghost = args.nghost if args.nghost is not None else 3  # Default nghost to 3
     
-    # Domain size
-    if not args.x1_max:
-        raise ValueError("--x1-max (vertical extent in meters) is required")
-    
+    # Domain height
     x1_max = args.x1_max
     
     # Calculate horizontal extents from polygon bounds (or use overrides if provided)
@@ -204,9 +201,7 @@ def generate_config(location_id, locations, template, args):
     x2_extent = args.x2_extent if args.x2_extent is not None else domain_extents['x2_extent']
     x3_extent = args.x3_extent if args.x3_extent is not None else domain_extents['x3_extent']
     
-    # Time limit (required)
-    if not args.tlim:
-        raise ValueError("--tlim (simulation time in seconds) is required")
+    # Time limit (default to 86400 seconds if not provided)
     tlim = args.tlim
     
     # Calculate center from polygon
@@ -324,7 +319,8 @@ def main():
     parser.add_argument(
         '--x1-max',
         type=float,
-        help="Vertical extent in meters [REQUIRED unless --list]"
+        default=20000.0,
+        help="Vertical extent in meters [default: 20000]"
     )
     
     parser.add_argument(
@@ -342,7 +338,8 @@ def main():
     parser.add_argument(
         '--tlim',
         type=int,
-        help="Simulation time limit in seconds [REQUIRED unless --list]"
+        default=86400,
+        help="Simulation time limit in seconds [default: 86400 (1 day)]"
     )
     
     parser.add_argument(
