@@ -92,13 +92,13 @@ scripted.save(output_file)
 ### Basic Usage
 
 ```bash
-python convert_netcdf_to_tensor.py <input_file.nc> [--output OUTPUT.pt]
+python convert_netcdf_to_tensor.py <input_file.nc> [--output OUTPUT.restart]
 ```
 
 ### Arguments
 
 - `input`: Input NetCDF file or directory containing .nc files
-- `--output` or `-o`: Output .pt file (for single file) or directory (for batch mode)
+- `--output` or `-o`: Output .restart file (for single file) or directory (for batch mode)
 - `--output-dir`: Alternative to --output for directory mode
 - `--pattern`: Glob pattern for finding NetCDF files (default: `*.nc`)
 
@@ -111,7 +111,7 @@ python convert_netcdf_to_tensor.py <input_file.nc> [--output OUTPUT.pt]
 python convert_netcdf_to_tensor.py regridded_block_0_0.nc
 
 # Convert with custom output name
-python convert_netcdf_to_tensor.py regridded_block_0_0.nc --output block_0_0.pt
+python convert_netcdf_to_tensor.py regridded_block_0_0.nc --output block_0_0.restart
 ```
 
 #### Convert All Files in a Directory
@@ -131,13 +131,13 @@ python convert_netcdf_to_tensor.py ./blocks/ --pattern "*block_*.nc"
 
 ### File Naming Convention
 
-Output files have the same basename as input files with `.pt` extension:
+Output files have the same basename as input files with `.restart` extension:
 - Input: `regridded_block_0_0.nc`
-- Output: `regridded_block_0_0.pt`
+- Output: `regridded_block_0_0.restart`
 
 ### Tensor Structure
 
-Each `.pt` file contains a `TensorModule` with a single tensor:
+Each `.restart` file contains a `TensorModule` with a single tensor:
 
 #### hydro_w Tensor
 
@@ -162,7 +162,7 @@ To load and use the tensors in PyTorch:
 import torch
 
 # Load the module
-module = torch.jit.load('regridded_block_0_0.pt')
+module = torch.jit.load('regridded_block_0_0.restart')
 
 # Access the tensor
 hydro_w = module.hydro_w
@@ -187,7 +187,7 @@ To load in LibTorch (C++):
 #include <torch/script.h>
 
 // Load the module
-torch::jit::script::Module module = torch::jit::load("regridded_block_0_0.pt");
+torch::jit::script::Module module = torch::jit::load("regridded_block_0_0.restart");
 
 // Access the tensor
 torch::Tensor hydro_w = module.attr("hydro_w").toTensor();
@@ -215,7 +215,7 @@ python convert_netcdf_to_tensor.py regridded_ann-arbor_20251102_block_0_0.nc
 
 ### Output
 
-- Filename: `regridded_ann-arbor_20251102_block_0_0.pt`
+- Filename: `regridded_ann-arbor_20251102_block_0_0.restart`
 - Tensor: `hydro_w` with shape `(4, 8, 56, 56, 56)`
 - Memory: Approximately 450 MB (4 × 8 × 56³ × 4 bytes)
 
@@ -225,7 +225,7 @@ python convert_netcdf_to_tensor.py regridded_ann-arbor_20251102_block_0_0.nc
 # Convert all 16 blocks from 4x4 decomposition
 python convert_netcdf_to_tensor.py ./blocks/ --output-dir ./tensors/
 
-# Result: 16 .pt files in ./tensors/ directory
+# Result: 16 .restart files in ./tensors/ directory
 ```
 
 ## Error Handling
@@ -352,7 +352,7 @@ python decompose_domain.py regridded_ann-arbor_20251102.nc 4 4 \
 # Step 6: Convert to tensors
 python convert_netcdf_to_tensor.py ./blocks/ --output-dir ./tensors/
 
-# Result: 16 .pt files ready for simulation in ./tensors/ directory
+# Result: 16 .restart files ready for simulation in ./tensors/ directory
 ```
 
 ## Coordinate System Notes
@@ -388,4 +388,4 @@ This reordering ensures compatibility with simulation models that expect specifi
 - Cloud variables are optional; zeros are used if missing
 - Pressure can be on cell centers or interfaces
 - Tensors are saved using torch.jit.script for LibTorch compatibility
-- Output files use the same basename as input files with .pt extension
+- Output files use the same basename as input files with .restart extension

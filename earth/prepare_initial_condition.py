@@ -244,7 +244,7 @@ def check_step6_files(tensors_dir):
         return False
     
     # Look for tensor files
-    tensor_files = list(tensors_dir.glob("*_block_*.pt"))
+    tensor_files = list(tensors_dir.glob("*_block_*.restart"))
     
     return len(tensor_files) > 0
 
@@ -616,7 +616,7 @@ def main():
     if if_decompose or args.stop_after == 5 or args.stop_after == 6:
         print(f"  - regridded_{location_id}_{end_date}_blocks/*_block_*_*.nc (Step 5)")
         if args.stop_after != 5:
-            print(f"  - regridded_{location_id}_{end_date}_tensors/*_block_*_*.pt (Step 6)")
+            print(f"  - regridded_{location_id}_{end_date}_tensors/*_block_*.restart(Step 6)")
             print()
             print(f"The PyTorch tensor files in regridded_{location_id}_{end_date}_tensors/ are ready for {location_name} simulations.")
         else:
