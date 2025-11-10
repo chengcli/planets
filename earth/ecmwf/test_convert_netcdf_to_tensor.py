@@ -185,7 +185,7 @@ class TestSaveTensors(unittest.TestCase):
         tensor = torch.randn(2, 3, 4, 5, 6)
         tensor_map = {'test_tensor': tensor}
         
-        output_file = os.path.join(self.temp_dir, 'test.pt')
+        output_file = os.path.join(self.temp_dir, 'test.restart')
         save_tensors(tensor_map, output_file)
         
         # Verify file was created
@@ -205,7 +205,7 @@ class TestSaveTensors(unittest.TestCase):
             'tensor2': tensor2
         }
         
-        output_file = os.path.join(self.temp_dir, 'test_multi.pt')
+        output_file = os.path.join(self.temp_dir, 'test_multi.restart')
         save_tensors(tensor_map, output_file)
         
         # Load and verify
@@ -237,7 +237,7 @@ class TestConvertNetCDFToTensor(unittest.TestCase):
         
         # Verify output file exists
         self.assertTrue(os.path.exists(output_file))
-        self.assertTrue(output_file.endswith('.pt'))
+        self.assertTrue(output_file.endswith('.restart'))
         
         # Load and verify tensor
         loaded = torch.jit.load(output_file)
@@ -430,7 +430,7 @@ class TestConvertNetCDFToTensor(unittest.TestCase):
     def test_custom_output_path(self):
         """Test conversion with custom output path."""
         input_file = os.path.join(self.temp_dir, 'test_block.nc')
-        output_file = os.path.join(self.temp_dir, 'custom_output.pt')
+        output_file = os.path.join(self.temp_dir, 'custom_output.restart')
         
         create_test_netcdf_block(input_file)
         
@@ -537,10 +537,10 @@ class TestConvertDirectory(unittest.TestCase):
         # Should have 3 output files
         self.assertEqual(len(output_files), 3)
         
-        # All files should exist and have .pt extension
+        # All files should exist and have .restart extension
         for output_file in output_files:
             self.assertTrue(os.path.exists(output_file))
-            self.assertTrue(output_file.endswith('.pt'))
+            self.assertTrue(output_file.endswith('.restart'))
     
     def test_custom_output_directory(self):
         """Test conversion with custom output directory."""
