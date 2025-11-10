@@ -5,11 +5,12 @@ Unified Earth Weather Data Download and Processing Script
 This script downloads and processes ERA5 weather data for any configured
 location using the complete ECMWF data curation pipeline.
 
-The script executes all 4 steps of the pipeline automatically:
+The script executes all steps of the pipeline automatically:
 Step 1: Fetch ERA5 data (dynamics and densities)
 Step 2: Calculate air density from downloaded data
 Step 3: Regrid to Cartesian coordinates
 Step 4: Compute hydrostatic pressure
+Step 5: Domain decomposition (optional, use --decompose flag)
 
 Usage:
     python prepare_initial_condition.py <location-id> [options]
@@ -26,6 +27,9 @@ Examples:
 
     # Run only first 2 steps
     python prepare_initial_condition.py white-sands --stop-after 2
+    
+    # Run with domain decomposition into 4x4 blocks
+    python prepare_initial_condition.py ann-arbor --decompose
 
     # Use custom timeout
     python prepare_initial_condition.py ann-arbor --timeout 7200
@@ -222,6 +226,17 @@ def check_step3_files(output_dir, location_id, end_date):
     return regridded_file.exists()
 
 
+def check_step5_files(blocks_dir):
+    """Check if Step 5 output files exist (decomposed blocks)."""
+    if not blocks_dir.exists():
+        return False
+    
+    # Look for block files
+    block_files = list(blocks_dir.glob("*_block_*_*.nc"))
+    
+    return len(block_files) > 0
+
+
 def wait_for_files(check_function, output_dir, step_name, timeout_seconds=60,
                    check_interval=5, location_id=None, end_date=None):
     """
@@ -282,8 +297,8 @@ def main():
     parser.add_argument(
         "--stop-after",
         type=int,
-        choices=[1, 2, 3, 4],
-        help="Stop after specified step (1-4)"
+        choices=[1, 2, 3, 4, 5],
+        help="Stop after specified step (1-5)"
     )
     
     parser.add_argument(
@@ -297,6 +312,26 @@ def main():
         '--locations-file',
         default='locations.csv',
         help="Path to locations table file (default: locations.csv)"
+    )
+    
+    parser.add_argument(
+        '--decompose',
+        action='store_true',
+        help="Enable domain decomposition (Step 5) after Step 4"
+    )
+    
+    parser.add_argument(
+        '--n-blocks-x2',
+        type=int,
+        default=4,
+        help="Number of blocks in x2 (Y, North-South) direction for decomposition (default: 4)"
+    )
+    
+    parser.add_argument(
+        '--n-blocks-x3',
+        type=int,
+        default=4,
+        help="Number of blocks in x3 (X, East-West) direction for decomposition (default: 4)"
     )
     
     args = parser.parse_args()
@@ -489,6 +524,42 @@ def main():
         print("\n✗ Pipeline failed at Step 4")
         return 1
     
+    if args.stop_after == 4:
+        print("\n" + "="*70)
+        print("Stopped after Step 4 as requested")
+        print("="*70)
+        return 0
+    
+    # Step 5: Domain decomposition (optional)
+    if args.decompose or args.stop_after == 5:
+        print("\n" + "="*70)
+        print("STEP 5: DOMAIN DECOMPOSITION")
+        print("="*70)
+        
+        decompose_script = ECMWF_DIR / "decompose_domain.py"
+        
+        # Create blocks directory with the same basename as the regridded file
+        blocks_dir = output_dir / f"regridded_{location_id}_{end_date}_blocks"
+        
+        step5_success = run_step_with_timeout(
+            "Step 5: Domain Decomposition",
+            ["python3", str(decompose_script),
+             str(regridded_output),
+             str(args.n_blocks_x2),
+             str(args.n_blocks_x3),
+             "--output-dir", str(blocks_dir)],
+            timeout_seconds=args.timeout
+        )
+        
+        if not step5_success:
+            print("\n✗ Pipeline failed at Step 5")
+            return 1
+        
+        # Wait for Step 5 files
+        if not wait_for_files(check_step5_files, blocks_dir, "Step 5", timeout_seconds=30):
+            print("✗ Step 5 output files not found")
+            return 1
+    
     # Success!
     print("\n" + "="*70)
     print("PIPELINE COMPLETED SUCCESSFULLY!")
@@ -501,8 +572,15 @@ def main():
     print(f"  - era5_hourly_densities_*.nc (Step 1)")
     print(f"  - era5_density_*.nc (Step 2)")
     print(f"  - regridded_{location_id}_{end_date}.nc (Step 3 & 4)")
-    print()
-    print(f"The regridded_{location_id}_{end_date}.nc file is ready for {location_name} simulations.")
+    
+    if args.decompose or args.stop_after == 5:
+        print(f"  - regridded_{location_id}_{end_date}_blocks/*_block_*_*.nc (Step 5)")
+        print()
+        print(f"The regridded_{location_id}_{end_date}.nc file and decomposed blocks are ready for {location_name} simulations.")
+    else:
+        print()
+        print(f"The regridded_{location_id}_{end_date}.nc file is ready for {location_name} simulations.")
+    
     print()
     
     return 0

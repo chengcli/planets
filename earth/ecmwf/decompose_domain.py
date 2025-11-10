@@ -36,7 +36,6 @@ Example:
 import argparse
 import os
 import sys
-import numpy as np
 from typing import Tuple, Dict, List
 from datetime import datetime, timezone
 
