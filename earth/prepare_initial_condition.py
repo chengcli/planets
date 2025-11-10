@@ -38,10 +38,10 @@ Examples:
 Requirements:
     - ECMWF CDS API credentials configured (~/.cdsapirc or CDSAPI_KEY env var)
     - Python packages: cdsapi, xarray, netCDF4, numpy, scipy, PyYAML, torch
-    - See ecmwf/requirements.txt for complete list
+    - See ecmwf_api/requirements.txt for complete list
 
 For setup instructions, see:
-    - ecmwf/README_ECMWF.md
+    - ecmwf_api/README_ECMWF.md
     - README.md in location directories
 """
 
@@ -57,7 +57,7 @@ import yaml
 
 # Add parent directory to path for importing ECMWF modules
 SCRIPT_DIR = Path(__file__).parent
-ECMWF_DIR = SCRIPT_DIR / "ecmwf"
+ECMWF_DIR = SCRIPT_DIR / "ecmwf_api"
 sys.path.insert(0, str(ECMWF_DIR))
 
 
