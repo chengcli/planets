@@ -11,6 +11,7 @@ Step 2: Calculate air density from downloaded data
 Step 3: Regrid to Cartesian coordinates
 Step 4: Compute hydrostatic pressure
 Step 5: Domain decomposition (optional, use --nX, --nY flag)
+Step 6: Convert splitted NetCDF to PyTorch tensors (restart files)
 
 Usage:
     python prepare_initial_condition.py <location-id> [options]
@@ -28,7 +29,7 @@ Examples:
     # Run only first 2 steps
     python prepare_initial_condition.py white-sands --stop-after 2
     
-    # Run with domain decomposition into 4x4 blocks
+    # Run with domain decomposition into 4x4 blocks and convert to tensors
     python prepare_initial_condition.py ann-arbor --nX 4 --nY 4
 
     # Use custom timeout
@@ -36,7 +37,7 @@ Examples:
 
 Requirements:
     - ECMWF CDS API credentials configured (~/.cdsapirc or CDSAPI_KEY env var)
-    - Python packages: cdsapi, xarray, netCDF4, numpy, scipy, PyYAML
+    - Python packages: cdsapi, xarray, netCDF4, numpy, scipy, PyYAML, torch
     - See ecmwf/requirements.txt for complete list
 
 For setup instructions, see:
@@ -237,6 +238,17 @@ def check_step5_files(blocks_dir):
     return len(block_files) > 0
 
 
+def check_step6_files(tensors_dir):
+    """Check if Step 6 output files exist (PyTorch tensors)."""
+    if not tensors_dir.exists():
+        return False
+    
+    # Look for tensor files
+    tensor_files = list(tensors_dir.glob("*_block_*.restart"))
+    
+    return len(tensor_files) > 0
+
+
 def wait_for_files(check_function, output_dir, step_name, timeout_seconds=60,
                    check_interval=5, location_id=None, end_date=None):
     """
@@ -297,8 +309,8 @@ def main():
     parser.add_argument(
         "--stop-after",
         type=int,
-        choices=[1, 2, 3, 4, 5],
-        help="Stop after specified step (1-5)"
+        choices=[1, 2, 3, 4, 5, 6],
+        help="Stop after specified step (1-6)"
     )
     
     parser.add_argument(
@@ -526,7 +538,7 @@ def main():
     
     # Step 5: Domain decomposition (optional)
     if_decompose = (args.nX > 1 or args.nY > 1)
-    if if_decompose or args.stop_after == 5:
+    if if_decompose or args.stop_after == 5 or args.stop_after == 6:
         print("\n" + "="*70)
         print("STEP 5: DOMAIN DECOMPOSITION")
         print("="*70)
@@ -554,6 +566,39 @@ def main():
         if not wait_for_files(check_step5_files, blocks_dir, "Step 5", timeout_seconds=30):
             print("✗ Step 5 output files not found")
             return 1
+        
+        if args.stop_after == 5:
+            print("\n" + "="*70)
+            print("Stopped after Step 5 as requested")
+            print("="*70)
+            return 0
+        
+        # Step 6: Convert NetCDF to PyTorch tensors
+        print("\n" + "="*70)
+        print("STEP 6: CONVERT NETCDF TO PYTORCH TENSORS")
+        print("="*70)
+        
+        convert_script = ECMWF_DIR / "convert_netcdf_to_tensor.py"
+        
+        # Create tensors directory
+        tensors_dir = output_dir / f"regridded_{location_id}_{end_date}_tensors"
+        
+        step6_success = run_step_with_timeout(
+            "Step 6: Convert to PyTorch Tensors",
+            ["python3", str(convert_script),
+             str(blocks_dir),
+             "--output-dir", str(tensors_dir)],
+            timeout_seconds=args.timeout
+        )
+        
+        if not step6_success:
+            print("\n✗ Pipeline failed at Step 6")
+            return 1
+        
+        # Wait for Step 6 files
+        if not wait_for_files(check_step6_files, tensors_dir, "Step 6", timeout_seconds=30):
+            print("✗ Step 6 output files not found")
+            return 1
     
     # Success!
     print("\n" + "="*70)
@@ -568,10 +613,15 @@ def main():
     print(f"  - era5_density_*.nc (Step 2)")
     print(f"  - regridded_{location_id}_{end_date}.nc (Step 3 & 4)")
     
-    if if_decompose or args.stop_after == 5:
+    if if_decompose or args.stop_after == 5 or args.stop_after == 6:
         print(f"  - regridded_{location_id}_{end_date}_blocks/*_block_*_*.nc (Step 5)")
-        print()
-        print(f"The regridded_{location_id}_{end_date}.nc file and decomposed blocks are ready for {location_name} simulations.")
+        if args.stop_after != 5:
+            print(f"  - regridded_{location_id}_{end_date}_tensors/*_block_*.restart(Step 6)")
+            print()
+            print(f"The PyTorch tensor files in regridded_{location_id}_{end_date}_tensors/ are ready for {location_name} simulations.")
+        else:
+            print()
+            print(f"The regridded_{location_id}_{end_date}.nc file and decomposed blocks are ready for {location_name} simulations.")
     else:
         print()
         print(f"The regridded_{location_id}_{end_date}.nc file is ready for {location_name} simulations.")
