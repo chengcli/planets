@@ -104,7 +104,7 @@ All regridding functions now accept an optional `n_jobs` parameter:
 
 The following functions support the `n_jobs` parameter:
 
-### ECMWF Regrid Module (`earth/ecmwf/regrid.py`)
+### ECMWF Regrid Module (`earth/ecmwf_api/regrid.py`)
 
 - `vertical_interp_to_z()`: Vertical interpolation with parallel column processing
 - `regrid_pressure_to_height()`: Full regridding pipeline with parallel vertical and horizontal interpolation
@@ -253,7 +253,7 @@ result = regrid_pressure_to_height(
 Run the included benchmark script to measure performance on your system:
 
 ```bash
-cd earth/ecmwf
+cd earth/ecmwf_api
 python benchmark_parallel.py
 ```
 
