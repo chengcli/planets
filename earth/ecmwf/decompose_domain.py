@@ -9,17 +9,24 @@ only, with no decomposition in the vertical direction (x1).
 Each block includes ghost zones on all sides to facilitate parallel computation with
 proper boundary conditions.
 
+The script supports parallel processing using multiple CPU cores to significantly
+improve performance for large files.
+
 Usage:
-    python decompose_domain.py <input_file> <n_blocks_x2> <n_blocks_x3> [--output-dir DIR]
+    python decompose_domain.py <input_file> <n_blocks_x2> <n_blocks_x3> [--output-dir DIR] [--num-workers N]
     
+    # Use all CPU cores (default)
     python decompose_domain.py regridded_ann-arbor_20251102.nc 4 4 --output-dir ./blocks/
+    
+    # Use specific number of workers
+    python decompose_domain.py regridded_ann-arbor_20251102.nc 4 4 --num-workers 4
 
 The script:
   1. Reads the regridded NetCDF file with ghost zones
   2. Extracts ghost zone size from metadata (nghost)
   3. Calculates interior domain size (without ghost zones)
   4. Divides interior domain into blocks
-  5. Extracts each block with ghost zones overlapping with neighbors
+  5. Extracts each block with ghost zones overlapping with neighbors (in parallel)
   6. Saves each block as a separate NetCDF file
 
 Output files are named: {base_name}_block_{i2}_{i3}.nc
@@ -38,6 +45,7 @@ import os
 import sys
 from typing import Tuple, Dict, List
 from datetime import datetime, timezone
+from multiprocessing import Pool, cpu_count
 
 try:
     from netCDF4 import Dataset
@@ -179,6 +187,22 @@ def calculate_block_boundaries(
         full_boundaries.append((full_start, full_end))
     
     return full_boundaries
+
+
+def _extract_block_wrapper(args: Tuple) -> str:
+    """
+    Wrapper function for extract_block that unpacks arguments.
+    This is needed for multiprocessing.Pool.map() compatibility.
+    
+    Args:
+        args: Tuple containing all arguments for extract_block
+        
+    Returns:
+        Output file path
+    """
+    (input_file, output_file, i2, j3, x2_bounds, x3_bounds, metadata) = args
+    extract_block(input_file, output_file, i2, j3, x2_bounds, x3_bounds, metadata)
+    return output_file
 
 
 def extract_block(
@@ -347,7 +371,8 @@ def decompose_domain(
     input_file: str,
     n_blocks_x2: int,
     n_blocks_x3: int,
-    output_dir: str = None
+    output_dir: str = None,
+    num_workers: int = None
 ) -> List[str]:
     """
     Decompose the domain into multiple blocks.
@@ -357,6 +382,7 @@ def decompose_domain(
         n_blocks_x2: Number of blocks in x2 direction
         n_blocks_x3: Number of blocks in x3 direction
         output_dir: Output directory (default: same as input file)
+        num_workers: Number of parallel workers (default: all CPU cores)
         
     Returns:
         List of output file paths
@@ -408,43 +434,89 @@ def decompose_domain(
     
     # Extract blocks
     print(f"\n3. Extracting blocks to: {output_dir}")
-    output_files = []
+    
+    # Determine number of workers
+    if num_workers is None:
+        num_workers = cpu_count()
     
     total_blocks = n_blocks_x2 * n_blocks_x3
-    block_count = 0
     
-    for i2 in range(n_blocks_x2):
-        for j3 in range(n_blocks_x3):
-            block_count += 1
-            
-            # Generate output filename
-            output_file = os.path.join(
-                output_dir,
-                f"{base_name}_block_{i2}_{j3}.nc"
-            )
-            
+    # Use parallel processing if more than one worker
+    if num_workers > 1 and total_blocks > 1:
+        print(f"   Using {num_workers} parallel workers for {total_blocks} blocks")
+        
+        # Prepare arguments for all blocks
+        block_args = []
+        for i2 in range(n_blocks_x2):
+            for j3 in range(n_blocks_x3):
+                output_file = os.path.join(
+                    output_dir,
+                    f"{base_name}_block_{i2}_{j3}.nc"
+                )
+                
+                block_args.append((
+                    input_file,
+                    output_file,
+                    i2,
+                    j3,
+                    x2_boundaries[i2],
+                    x3_boundaries[j3],
+                    metadata
+                ))
+        
+        # Process blocks in parallel
+        with Pool(processes=num_workers) as pool:
+            output_files = pool.map(_extract_block_wrapper, block_args)
+        
+        # Print summary of completed blocks
+        for i, (i2, j3) in enumerate([(args[2], args[3]) for args in block_args], 1):
             x2_start, x2_end = x2_boundaries[i2]
             x3_start, x3_end = x3_boundaries[j3]
-            
             n_x2_block = x2_end - x2_start
             n_x3_block = x3_end - x3_start
-            
-            print(f"   Block ({i2},{j3}): {block_count}/{total_blocks} - "
+            print(f"   Block ({i2},{j3}): {i}/{total_blocks} - "
                   f"x2[{x2_start}:{x2_end}]({n_x2_block}), "
-                  f"x3[{x3_start}:{x3_end}]({n_x3_block})")
-            
-            # Extract and save block
-            extract_block(
-                input_file,
-                output_file,
-                i2,
-                j3,
-                x2_boundaries[i2],
-                x3_boundaries[j3],
-                metadata
-            )
-            
-            output_files.append(output_file)
+                  f"x3[{x3_start}:{x3_end}]({n_x3_block}) [completed]")
+    else:
+        # Sequential processing (single worker or single block)
+        if num_workers == 1:
+            print(f"   Using single worker (sequential processing)")
+        
+        output_files = []
+        block_count = 0
+        
+        for i2 in range(n_blocks_x2):
+            for j3 in range(n_blocks_x3):
+                block_count += 1
+                
+                # Generate output filename
+                output_file = os.path.join(
+                    output_dir,
+                    f"{base_name}_block_{i2}_{j3}.nc"
+                )
+                
+                x2_start, x2_end = x2_boundaries[i2]
+                x3_start, x3_end = x3_boundaries[j3]
+                
+                n_x2_block = x2_end - x2_start
+                n_x3_block = x3_end - x3_start
+                
+                print(f"   Block ({i2},{j3}): {block_count}/{total_blocks} - "
+                      f"x2[{x2_start}:{x2_end}]({n_x2_block}), "
+                      f"x3[{x3_start}:{x3_end}]({n_x3_block})")
+                
+                # Extract and save block
+                extract_block(
+                    input_file,
+                    output_file,
+                    i2,
+                    j3,
+                    x2_boundaries[i2],
+                    x3_boundaries[j3],
+                    metadata
+                )
+                
+                output_files.append(output_file)
     
     print("\n" + "="*70)
     print("Domain decomposition completed successfully!")
@@ -468,8 +540,14 @@ ECMWF data pipeline. The decomposition is done in horizontal directions only
 (x2, x3), with each block including ghost zones for parallel computation.
 
 Example:
-    # Decompose into 4x4 blocks
+    # Decompose into 4x4 blocks (using all CPU cores)
     python decompose_domain.py regridded_ann-arbor_20251102.nc 4 4
+    
+    # Decompose using 4 parallel workers
+    python decompose_domain.py regridded_data.nc 4 4 --num-workers 4
+    
+    # Sequential processing (single worker)
+    python decompose_domain.py regridded_data.nc 2 2 --num-workers 1
     
     # Decompose into 2x3 blocks with custom output directory
     python decompose_domain.py regridded_data.nc 2 3 --output-dir ./blocks/
@@ -509,6 +587,13 @@ Requirements:
         help='Output directory for block files (default: same as input file)'
     )
     
+    parser.add_argument(
+        '--num-workers', '-n',
+        type=int,
+        default=None,
+        help='Number of parallel workers (default: use all CPU cores)'
+    )
+    
     args = parser.parse_args()
     
     # Validate arguments
@@ -524,12 +609,17 @@ Requirements:
         print(f"✗ Error: n_blocks_x3 must be at least 1, got {args.n_blocks_x3}")
         sys.exit(1)
     
+    if args.num_workers is not None and args.num_workers < 1:
+        print(f"✗ Error: num_workers must be at least 1, got {args.num_workers}")
+        sys.exit(1)
+    
     try:
         decompose_domain(
             args.input_file,
             args.n_blocks_x2,
             args.n_blocks_x3,
-            args.output_dir
+            args.output_dir,
+            args.num_workers
         )
         
     except Exception as e:

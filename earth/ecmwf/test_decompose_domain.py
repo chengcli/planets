@@ -543,6 +543,70 @@ class TestDecomposeDomain(unittest.TestCase):
                         rho_expected,
                         err_msg=f"Data mismatch in block {block_file}"
                     )
+    
+    def test_parallel_processing_with_workers(self):
+        """Test parallel processing with explicit number of workers."""
+        # Create test file
+        TestCreateTestNetCDF.create_test_netcdf(
+            self.input_file,
+            n_time=2,
+            n_x1=10,
+            n_x2=26,
+            n_x3=26,
+            nghost=3,
+            nx2_interior=20,
+            nx3_interior=20
+        )
+        
+        # Test with 2 workers
+        output_files = decompose_domain(
+            self.input_file,
+            2,
+            2,
+            self.output_dir,
+            num_workers=2
+        )
+        
+        # Should create 4 blocks
+        self.assertEqual(len(output_files), 4)
+        
+        # Verify all files exist
+        for f in output_files:
+            self.assertTrue(os.path.exists(f))
+    
+    def test_sequential_processing(self):
+        """Test sequential processing with single worker."""
+        # Create test file
+        TestCreateTestNetCDF.create_test_netcdf(
+            self.input_file,
+            n_time=2,
+            n_x1=10,
+            n_x2=26,
+            n_x3=26,
+            nghost=3,
+            nx2_interior=20,
+            nx3_interior=20
+        )
+        
+        # Test with 1 worker (sequential)
+        output_files = decompose_domain(
+            self.input_file,
+            2,
+            2,
+            self.output_dir,
+            num_workers=1
+        )
+        
+        # Should create 4 blocks
+        self.assertEqual(len(output_files), 4)
+        
+        # Verify all files exist and contain correct data
+        for f in output_files:
+            self.assertTrue(os.path.exists(f))
+            with Dataset(f, 'r') as nc:
+                # Check that variables exist
+                self.assertIn('rho', nc.variables)
+                self.assertIn('u', nc.variables)
 
 
 if __name__ == '__main__':
