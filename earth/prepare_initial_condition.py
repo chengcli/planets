@@ -11,7 +11,7 @@ Step 2: Calculate air density from downloaded data
 Step 3: Regrid to Cartesian coordinates
 Step 4: Compute hydrostatic pressure
 Step 5: Domain decomposition (optional, use --nX, --nY flag)
-Step 6: Convert NetCDF to PyTorch tensors (when Step 5 is run)
+Step 6: Convert splitted NetCDF to PyTorch tensors (restart files)
 
 Usage:
     python prepare_initial_condition.py <location-id> [options]
