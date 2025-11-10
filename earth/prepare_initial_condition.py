@@ -10,7 +10,7 @@ Step 1: Fetch ERA5 data (dynamics and densities)
 Step 2: Calculate air density from downloaded data
 Step 3: Regrid to Cartesian coordinates
 Step 4: Compute hydrostatic pressure
-Step 5: Domain decomposition (optional, use --decompose flag)
+Step 5: Domain decomposition (optional, use --nX, --nY flag)
 
 Usage:
     python prepare_initial_condition.py <location-id> [options]
@@ -29,7 +29,7 @@ Examples:
     python prepare_initial_condition.py white-sands --stop-after 2
     
     # Run with domain decomposition into 4x4 blocks
-    python prepare_initial_condition.py ann-arbor --decompose
+    python prepare_initial_condition.py ann-arbor --nX 4 --nY 4
 
     # Use custom timeout
     python prepare_initial_condition.py ann-arbor --timeout 7200
@@ -232,7 +232,7 @@ def check_step5_files(blocks_dir):
         return False
     
     # Look for block files
-    block_files = list(blocks_dir.glob("*_block_*_*.nc"))
+    block_files = list(blocks_dir.glob("*_block_*.nc"))
     
     return len(block_files) > 0
 
@@ -315,23 +315,17 @@ def main():
     )
     
     parser.add_argument(
-        '--decompose',
-        action='store_true',
-        help="Enable domain decomposition (Step 5) after Step 4"
+        '--nY',
+        type=int,
+        default=1,
+        help="Number of blocks in x2 (Y, North-South) direction for decomposition (default: 1)"
     )
     
     parser.add_argument(
-        '--n-blocks-x2',
+        '--nX',
         type=int,
-        default=4,
-        help="Number of blocks in x2 (Y, North-South) direction for decomposition (default: 4)"
-    )
-    
-    parser.add_argument(
-        '--n-blocks-x3',
-        type=int,
-        default=4,
-        help="Number of blocks in x3 (X, East-West) direction for decomposition (default: 4)"
+        default=1,
+        help="Number of blocks in x3 (X, East-West) direction for decomposition (default: 1)"
     )
     
     args = parser.parse_args()
@@ -531,7 +525,8 @@ def main():
         return 0
     
     # Step 5: Domain decomposition (optional)
-    if args.decompose or args.stop_after == 5:
+    if_decompose = (args.nX > 1 or args.nY > 1)
+    if if_decompose or args.stop_after == 5:
         print("\n" + "="*70)
         print("STEP 5: DOMAIN DECOMPOSITION")
         print("="*70)
@@ -545,8 +540,8 @@ def main():
             "Step 5: Domain Decomposition",
             ["python3", str(decompose_script),
              str(regridded_output),
-             str(args.n_blocks_x2),
-             str(args.n_blocks_x3),
+             str(args.nY),
+             str(args.nX),
              "--output-dir", str(blocks_dir)],
             timeout_seconds=args.timeout
         )
@@ -573,7 +568,7 @@ def main():
     print(f"  - era5_density_*.nc (Step 2)")
     print(f"  - regridded_{location_id}_{end_date}.nc (Step 3 & 4)")
     
-    if args.decompose or args.stop_after == 5:
+    if if_decompose or args.stop_after == 5:
         print(f"  - regridded_{location_id}_{end_date}_blocks/*_block_*_*.nc (Step 5)")
         print()
         print(f"The regridded_{location_id}_{end_date}.nc file and decomposed blocks are ready for {location_name} simulations.")
