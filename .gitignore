@@ -5,6 +5,9 @@
 # pt
 *.pt
 
+# restart
+*.restart
+
 # png
 *.png
 

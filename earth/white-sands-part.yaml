@@ -1,0 +1,150 @@
+# Earth Atmospheric Simulation Configuration Template
+# 
+# This template is used to generate location-specific configuration files.
+# Placeholders (in {braces}) are replaced by the config generator script.
+#
+# Location: White Sands New Mexico
+# Description: Location: White Sands New Mexico
+# Center coordinates: 33.1°N, -106.45°W/E
+# Domain: 222.0 km × 139.48016631730306 km horizontal, 20.0 km vertical
+# Time window: 2025-10-01 to 2025-10-02
+
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: H2O
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: H2O(l)
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+  - name: H2O(l,p)
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+geometry:
+  # Must be cartesian type for atmospheric simulations
+  type: cartesian
+  
+  # Domain bounds in meters (includes ghost zones)
+  # x1 = Z direction (vertical, height above ground)
+  # x2 = Y direction (north-south distance)
+  # x3 = X direction (east-west distance)
+  bounds:
+    x1min: 0.0             # Ground level (meters)
+    x1max: 20000.0        # Vertical extent (top of domain)
+    x2min: 0.0             # South edge (meters, including ghost)
+    x2max: 55500.0     # North-south extent (including ghost)
+    x3min: 0.0             # West edge (meters, including ghost)
+    x3max: 34870.0     # East-west extent (including ghost)
+  
+  # Grid cell configuration
+  # Total cells = interior cells + 2 × nghost in each direction
+  cells:
+    nx1: 150             # Interior cells in vertical direction
+    nx2: 400             # Interior cells in north-south direction
+    nx3: 300             # Interior cells in east-west direction
+    nghost: 3       # Number of ghost cells on each side
+  
+  # Geographic center of the computational domain
+  center_latitude: 33.1    # degrees north
+  center_longitude: -106.45  # degrees (negative = west, positive = east)
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor:  1.e-10
+    pressure-floor: 1.e-10
+    limiter: false
+
+  vertical-projection:
+    type: temperature
+    pressure-margin: 1.e-6
+
+  reconstruct:
+    vertical:
+      type: weno5
+      scale: true
+      shock: true
+
+    horizontal:
+      type: weno5
+      scale: true
+      shock: true
+
+  riemann-solver:
+    type: hllc
+
+boundary-condition:
+  internal:
+    solid-density: 1.e3
+    solid-pressure: 1.e9
+    max-iter: 5
+
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: outflow
+    x2-outer: outflow
+    x3-inner: outflow
+    x3-outer: outflow
+
+integration:
+  # Integration parameters for atmospheric model
+  type: rk3                # Time integration method
+  cfl: 0.45                # CFL number for stability
+  implicit-scheme: 0       # Explicit time integration
+  nlim: -1                 # No step limit
+  tlim: 86400              # Simulation time (seconds)
+  ncycle_out: 10           # Output every n cycles
+  
+  # Date for fetching ERA5 data (YYYY-MM-DD format)
+  start-date: 2025-10-01
+  end-date: 2025-10-02
+
+forcing:
+  # Gravity for hydrostatic balance calculations
+  # Note: grav1 is negative because gravity points downward
+  const-gravity:
+    grav1: -9.80665        # m/s² (Earth's standard gravity)
+
+sedimentation:
+  radius:
+    H2O(l,p): 1.0e-10
+
+  density:
+    H2O(l,p): 1000.
+
+  const-vsed:
+    H2O(l,p): -10.0
+
+reactions:
+  - equation: H2O <=> H2O(l)
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+  - equation: H2O(l) => H2O(l,p)
+    type: coagulation
+    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
+
+  - equation: H2O(l,p) => H2O
+    type: evaporation
+    rate-constant: {formula: h2o_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+
+outputs:
+  - type: restart
+    dt: 300.
+  - type: netcdf
+    variables: [prim, uov]
+    dt: 30.

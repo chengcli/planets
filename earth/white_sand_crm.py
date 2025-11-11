@@ -5,6 +5,7 @@ import yaml
 import torch
 import snapy
 import kintera
+from pathlib import Path
 from snapy import (
         index,
         MeshBlockOptions,
@@ -21,94 +22,23 @@ from kintera import (
 
 torch.set_default_dtype(torch.float64)
 
-def setup_moist_adiabatic_profile(config, coord, eos, thermo_x,
-                                  device=torch.device("cpu")):
-    Tmin = float(config["problem"]["Tmin"])
-    grav = - float(config["forcing"]["const-gravity"]["grav1"])
-    Ps = float(config["problem"]["Ps"])
-    Ts = float(config["problem"]["Ts"])
+RESTART_FOLDER = Path("31.90N_34.30N_107.35W_105.55W") / "regridded_white-sands_20251002"
+RESTART_FILE = "regridded_white-sands_20251002_block_0_0.restart"
 
-    # dimensions
-    nc3 = coord.buffer("x3v").shape[0]
-    nc2 = coord.buffer("x2v").shape[0]
-    nc1 = coord.buffer("x1v").shape[0]
-    ny = len(thermo_x.options.species()) - 1
-    nvar = eos.nvar()
+def load_restart_block(block_vars):
+    restart = torch.jit.load(RESTART_FOLDER / RESTART_FILE)
+    print('shape = ', restart.hydro_w.shape)
 
-    temp = Ts * torch.ones((nc3, nc2), device=device)
-    pres = Ps * torch.ones((nc3, nc2), device=device)
-    xfrac = torch.zeros((nc3, nc2, 1 + ny), device=device)
-
-    # read in compositions
-    for i in range(1, 1 + ny):
-        name = 'x' + thermo_x.options.species()[i]
-        if name in config["problem"]:
-            xfrac[:, :, i] = float(config["problem"][name])
-
-    # dry air mole fraction
-    xfrac[:, :, 0] = 1.0 - xfrac[:, :, 1:].sum(dim=2)
-
-    # adiabatic extrapolate half a grid
-    ifirst = coord.ifirst()
-    dx1f = coord.buffer("dx1f")
-    dz = dx1f[ifirst].item()
-    thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz / 2.0)
-
-    nvapor = len(thermo_x.options.vapor_ids())
-    ncloud = len(thermo_x.options.cloud_ids())
-    i = ifirst
-    w = torch.zeros((nvar, nc3, nc2, nc1), device=device)
-    while i < coord.ilast():
-        conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-
-        w[index.ipr, :, :, i] = pres
-        w[index.idn, :, :, i] = thermo_x.compute("V->D", [conc])
-        w[index.icy:, :, :, i] = thermo_x.compute("X->Y", [xfrac])
-
-        if (temp < Tmin).any().item():
-            raise ValueError("Temperature below minimum")
-        dz = dx1f[i].item()
-        thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz)
-        i += 1
-
-    # isothermal extrapolation
-    while i < coord.ilast():
-        mu = (thermo_x.buffer("mu") * xfrac).sum(-1);
-        dz = dx1f[i].item()
-        pres *= torch.exp(-grav * mu * dz / (kintera.constants.Rgas * temp))
-        conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-        w[index.ipr, :, :, i] = pres
-        w[index.idn, :, :, i] = thermo_x.compute("V->D", [conc])
-        w[index.icy:, :, :, i] = thermo_x.compute("X->Y", [xfrac])
-        i += 1
-
-    # add noise
-    w[index.ivx] += 0.01 * torch.rand_like(w[index.ivx])
-    w[index.ivy] += 0.01 * torch.rand_like(w[index.ivy])
-
-    return w;
-
-def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
-    # evolve kinetics
-    hydro_u = block_vars["hydro_u"]
-    hydro_w = block_vars["hydro_w"]
-
-    temp = eos.compute("W->T", [hydro_w])
-    pres = hydro_w[index.ipr]
-    xfrac = thermo_y.compute("Y->X", [hydro_w[index.icy:, :, :, :]])
-    conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-    cp_vol = thermo_x.compute("TV->cp", [temp, conc])
-
-    conc_kinet = conc[:, :, :, 1:]
-    rate, rc_ddC, rc_ddT = kinet.forward_nogil(temp, pres, conc_kinet)
-    jac = kinet.jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT)
-    del_conc = evolve_implicit(rate, kinet.buffer("stoich"), jac, dt)
-    del_rho = del_conc / thermo_y.buffer("inv_mu")[1:].view(1, 1, 1, -1)
-    hydro_u[index.icy:, :, :, :] += del_rho.permute(3, 0, 1, 2)
+    block_vars["hydro_w"] = restart.hydro_w[0,...]
 
 if __name__ == "__main__":
-    infile = "jupiter3d.yaml"
-    config = yaml.safe_load(open(infile, "r"))
+    block_vars = {}
+    load_restart_block(block_vars)
+    print("hydro_w shape = ", block_vars["hydro_w"].shape)
+    exit()
+
+    #infile = "jupiter3d.yaml"
+    #config = yaml.safe_load(open(infile, "r"))
 
     # device
     device = torch.device("cuda:0")
@@ -131,27 +61,8 @@ if __name__ == "__main__":
     block_vars = {}
     interior = block.part((0, 0, 0))
 
-    if "init_cond" in config["problem"]:
-        nc3 = coord.buffer("x3v").shape[0]
-        nc2 = coord.buffer("x2v").shape[0]
-        nc1 = coord.buffer("x1v").shape[0]
-        nvar = eos.nvar()
-        block_vars["hydro_w"] = torch.zeros((nvar, nc3, nc2, nc1),
-                                            device=device)
-
-        module = torch.jit.load(config["problem"]["init_cond"])
-        data = {name: param for name, param in module.named_buffers()}
-        block_vars["hydro_w"][interior] = data["hydro_w"].to(device)
-    else:
-        block_vars["hydro_w"] = setup_moist_adiabatic_profile(
-                config, coord, eos, thermo_x, device=device)
-
     # initialize
     block_vars = block.initialize(block_vars)
-
-    out2 = NetcdfOutput(OutputOptions().file_basename("jupiter3d").fid(2).variable("prim"))
-    out3 = NetcdfOutput(OutputOptions().file_basename("jupiter3d").fid(3).variable("uov"))
-    out4 = NetcdfOutput(OutputOptions().file_basename("jupiter3d").fid(4).variable("diag"))
 
     # kinetics model
     op_kinet = KineticsOptions.from_yaml(infile)
